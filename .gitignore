@@ -1,0 +1,30 @@
+# Compiler files
+cache/
+cache_hardhat/
+out/
+artifacts/
+typechain/
+
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*/31337/
+/broadcast/**/dry-run/
+
+# Docs
+docs/
+
+# Dotenv file
+.env
+
+# Coverage file
+lcov.info
+coverage/
+
+# Environment config
+.vscode/
+
+# Node
+node_modules
+
+# JetBrain
+.idea/
