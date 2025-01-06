@@ -5,7 +5,7 @@ import {UserIntent} from "./../interfaces/UserIntent.sol";
 import {IStandard} from "./../interfaces/IStandard.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
 
-contract ICS0000010000000000 is IStandard {
+contract ICS4 is IStandard {
     string public constant ICS_NUMBER = "0000010000000000";
     string public constant DESCRIPTION = "Self-Relay Execution Standard";
     string public constant VERSION = "0.0.0";
@@ -31,4 +31,20 @@ contract ICS0000010000000000 is IStandard {
         bytes[] memory instructions = intent.instructions;
         return (abi.encode(VALIDATION_APPROVED), instructions);
     }
+
+    function sampleNestedIntent(address relayer) external view returns (bytes memory, bytes[] memory) {
+        bytes[] memory instructions = new bytes[](1);
+        instructions[0] = abi.encode(relayer, address(this));
+
+        return ("0x1", instructions);
+    }
+
+    function executeUserIntent(UserIntent calldata intent) external returns (bytes memory) {
+        bytes memory executeCallData = abi.encodeWithSelector(IACCOUNT_EXECUTE_USER_INTENT_SELECTOR, intent);
+
+        (, bytes memory result) = intent.sender.call{value: 0, gas: gasleft()}(executeCallData);
+        return result;
+    }
+
+    receive() external payable {}
 }
