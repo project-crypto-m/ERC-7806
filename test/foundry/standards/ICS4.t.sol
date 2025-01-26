@@ -1,6 +1,9 @@
 /* solhint-disable func-name-mixedcase */
 /* solhint-disable const-name-snakecase */
 
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
 import "forge-std/Test.sol";
 import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
 import {ICS0000010000000000} from "./../../../contracts/standards/ICS4.sol";
