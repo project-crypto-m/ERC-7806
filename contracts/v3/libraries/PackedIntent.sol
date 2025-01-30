@@ -3,8 +3,6 @@ pragma solidity ^0.8.24;
 
 import {IAccount} from "./../interfaces/IAccount.sol";
 
-error ExecutionError();
-
 /*
 PackedIntent packs metadata of intent (sender, standard, lengths) into bytes
 1. sender: address, 20-bytes
@@ -17,6 +15,16 @@ library PackedIntent {
     function getSenderAndStandard(bytes calldata intent) external pure returns (address, address) {
         require(intent.length >= 40, "Intent too short");
         return (address(bytes20(intent[: 20])), address(bytes20(intent[20 : 40])));
+    }
+
+    function getSenderAndStandardAssembly(bytes calldata intent) external pure returns (address sender, address standard) {
+        require(intent.length >= 40, "Intent too short");
+        assembly {
+            sender := shr(96, calldataload(intent.offset))
+            standard := shr(96, calldataload(add(intent.offset, 20))) // Load 20 bytes starting at offset 20
+        }
+
+        return (sender, standard);
     }
 
     function getLengths(bytes calldata intent) external pure returns (uint256, uint256, uint256) {

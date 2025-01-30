@@ -19,72 +19,36 @@ abstract contract SelfExecutableAccount is IAccount {
     }
 
     function executeSelfIntent(bytes calldata intent) internal returns (bytes memory) {
-        (uint256 hLen, uint256 iLen, uint256 sLen) = PackedIntent.getLengths(intent);
-        require(sLen == 0, "Signature shouldn't be provided");
-        require(intent.length == hLen + iLen + 46, "Lengths not match");
+        (uint256 headerLength, uint256 uintVar1,) = PackedIntent.getLengths(intent);
+        require(intent.length == headerLength + uintVar1 + 46, "Lengths not match");
+        // no signature
 
-        bytes memory intentCopy = new bytes(intent.length);
-        assembly {
-            // Copy calldata to memory
-            calldatacopy(add(intentCopy, 0x20), intent.offset, intent.length)
-        }
+        uintVar1 = 78 + headerLength;
+        // start pointer, skip (32-bytes offset, sender, standard, 3 x lengths, header)
 
-        uint256 numIns = hLen / 2;
-        uint256 start = 78 + hLen; // skip (32-bytes offset, sender, standard, 3 x lengths, header)
         address dest;
-        bool hasValue;
+        bytes1 hasValue;
         uint256 value;
         bool success;
-        uint256 dLen;
+        uint16 dataLength;
         bytes memory executeData;
 
-        for (uint256 i = 0; i < numIns; i++) {
-            assembly {
-                let data := mload(add(add(intentCopy, 78), i)) // load intent[46 + i: 78 + i]
-                // Extract the first 2 bytes (uint16)
-                dLen := shr(240, data) // Shift right by 240 bits (256 - 16)
-
-                data := mload(add(intentCopy, start))  // load intent[start - 32 : start]
-                // 21-th byte indicate whether there is an uint256 value
-                hasValue := iszero(iszero(byte(20, data)))
-                // first bytes20 is the destination address
-                dest := shr(96, data)
-            }
-
-            if (hasValue) {
-                assembly {
-                    value := mload(add(add(intentCopy, start), 21)) // load 32 bytes after 21 = address + bool
-
-                    executeData := mload(0x40)  // point execute data to free memory pointer
-                    // Store the length of the call data slice
-                    mstore(executeData, dLen)
-
-                    let readPtr := add(intentCopy, add(start, 53)) // Start of the slice
-                    let copyPtr := add(executeData, 32) // Pointer to the result's data section
-                    for { let j := 0 } lt(j, dLen) { j := add(j, 32) } {
-                        mstore(add(copyPtr, j), mload(add(readPtr, j)))
-                    }
-
-                    // Update the free memory pointer
-                    mstore(0x40, add(copyPtr, dLen))
-                }
-
-                (success,) = dest.call{value : value, gas : gasleft()}(executeData);
-                start = start + 53 + dLen;
+        for (uint256 i = 0; i < headerLength; i += 2) {
+            dataLength = uint16(bytes2(intent[46 + i : 48 + i]));
+            dest = address(bytes20(intent[uintVar1 : uintVar1 + 20]));
+            hasValue = bytes1(intent[uintVar1 + 20 : uintVar1 + 21]);
+            if (hasValue == bytes1(0x01)) {
+                (success,) = dest.call{
+                    value : uint256(bytes32(intent[uintVar1 + 21 : uintVar1 + 53])),
+                    gas : gasleft()
+                }(intent[uintVar1 + 53 : uintVar1 + 53 + dataLength]);
+                uintVar1 = uintVar1 + 53 + dataLength;
             } else {
-                assembly {
-                    executeData := mload(0x40)
-                    mstore(executeData, dLen)
-                    let readPtr := add(intentCopy, add(start, 21)) // Start of the slice
-                    let copyPtr := add(executeData, 32) // Pointer to the result's data section
-                    for { let j := 0 } lt(j, dLen) { j := add(j, 32) } {
-                        mstore(add(copyPtr, j), mload(add(readPtr, j)))
-                    }
-                    mstore(0x40, add(copyPtr, dLen))
-                }
-
-                (success,) = dest.call{value : 0, gas : gasleft()}(executeData);
-                start = start + 21 + dLen;
+                (success,) = dest.call{
+                value : uint256(bytes32(intent[uintVar1 + 21 : uintVar1 + 53])),
+                gas : gasleft()
+                }(intent[uintVar1 + 21 : uintVar1 + 21 + dataLength]);
+                uintVar1 = uintVar1 + 21 + dataLength;
             }
 
             if (!success) {
@@ -115,7 +79,7 @@ abstract contract SelfExecutableAccount is IAccount {
         }
 
         for (uint256 i = 0; i < intents.length; i++) {
-            (sender, ) = PackedIntent.getSenderAndStandard(intents[i]);
+            (sender,) = PackedIntent.getSenderAndStandard(intents[i]);
             insData = abi.encodeWithSelector(IAccount.executeUserIntent.selector, intents[i]);
             header = bytes.concat(header, bytes2(uint16((insData.length) & 0xFFFF)));
             instructions = bytes.concat(instructions, bytes20(sender), bytes1(0x00), insData);
@@ -127,11 +91,11 @@ abstract contract SelfExecutableAccount is IAccount {
         }
 
         return bytes.concat(
-            bytes20(account),  // address
-            bytes20(account),  // standard
-            bytes2(uint16((header.length) & 0xFFFF)),  // header length
-            bytes2(uint16((instructions.length) & 0xFFFF)),  // instructions length
-            bytes2(0x0000),  // signature length
+            bytes20(account), // address
+            bytes20(account), // standard
+            bytes2(uint16((header.length) & 0xFFFF)), // header length
+            bytes2(uint16((instructions.length) & 0xFFFF)), // instructions length
+            bytes2(0x0000), // signature length
             header,
             instructions
         );

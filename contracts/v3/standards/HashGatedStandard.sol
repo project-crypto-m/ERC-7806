@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IStandard} from "./../interfaces/IStandard.sol";
 
 abstract contract HashGatedStandard is IStandard {
-    event HashUsed(address sender, uint256 nonce);
+    event HashUsed(address sender, uint256 hash);
 
     mapping(bytes32 => bool) internal _hashes;
 

@@ -193,7 +193,7 @@ contract ICS3 is IStandard {
         return (abi.encode(VALIDATION_APPROVED), unpackedInstructions);
     }
 
-    function z_validateSignatures(
+    function _validateSignatures(
         address sender,
         UnpackedHeader memory unpackedHeader,
         bytes[] memory signedInstructions,
