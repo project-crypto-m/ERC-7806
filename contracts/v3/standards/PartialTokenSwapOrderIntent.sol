@@ -74,26 +74,17 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
             }
         }
 
-        (uint8 numUsedSig, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, uintVar3);
-        if (numUsedSig == 0) {
+        (uint8 uint8Var, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, uintVar3);
+        if (uint8Var == 0) {
             return VALIDATION_APPROVED_SENDER_ONLY;
         }
-        if (numUsedSig == 1) {
+        if (uint8Var == 1) {
             require(signatureLen == 65, "Only 1 signature is needed");
         }
         require(this.getAmount(sender, hash) + uintVar2 <= uintVar1, "Order limit exceeded");
 
-        uintVar3 += signatureLen;
-        if (intent.length == uintVar3) {
-            return VALIDATION_APPROVED;
-            // no more nested intent
-        }
-
-        require(uintVar3 + 40 <= intent.length, "Invalid nested intent");
-        // nested intent
-        sender = address(bytes20(intent[uintVar3 : uintVar3 + 20]));
-        addressVar = address(bytes20(intent[uintVar3 + 20 : uintVar3 + 40]));
-        return IStandard(addressVar).validateUserIntent(intent[uintVar3 + 40 :]);
+        // no need to validate nested intent as that should be validated separately
+        return VALIDATION_APPROVED;
     }
 
     function unpackOperations(bytes calldata intent) external view returns (bytes4 code, bytes[] memory unpackedInstructions) {
@@ -108,9 +99,9 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         // because solver != address(0), this numUsedSig can only be 1 or 2
         (uint8 uintVar, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, lengthVar);
         lengthVar = uintVar == 1 ? lengthVar + 65 : lengthVar + 130;  // total length of this intent
-        uintVar = intent.length == lengthVar ? 0 : 1;  // nested intent indicator
+        uintVar = intent.length == lengthVar ? 0 : uint8(bytes1(intent[lengthVar: lengthVar + 1]));  // # of nested intents
 
-        // total instructions = transfer out + nestIntent execution (optional) + transfer in + mark nonce
+        // total instructions = transfer out + nestIntents execution (optional) + transfer in + mark nonce
         unpackedInstructions = new bytes[](3 + uintVar);
 
         // out token instruction, send token to tx.origin (aka. relayer)
@@ -128,33 +119,40 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         }
 
         addressVar = address(bytes20(intent[114 : 134]));
-        uint256 inAmount = uint256(uint128(bytes16(intent[134 : 150])));
-        inAmount = isFullOrder ? inAmount : inAmount * orderAmount / maxAmount;
+        uint256 uint256Var = uint256(uint128(bytes16(intent[134 : 150])));  // in amount of this order
+        uint256Var = isFullOrder ? uint256Var : uint256Var * orderAmount / maxAmount;
         // can't take in 0 amount
-        inAmount = inAmount > 0 ? inAmount : 1;
+        uint256Var = uint256Var > 0 ? uint256Var : 1;
         if (addressVar == address(0)) {
             // transfer native token out from this standard address
             unpackedInstructions[1 + uintVar] = abi.encode(
-                address(this), uint256(0), abi.encodeWithSelector(ITokenRelayer.transferEth.selector, inAmount));
+                address(this), uint256(0), abi.encodeWithSelector(ITokenRelayer.transferEth.selector, uint256Var));
         } else {
             // transfer ERC20 token from tx.origin (aka relayer) through this standard
             unpackedInstructions[1 + uintVar] = abi.encode(
                 address(this), uint256(0), abi.encodeWithSelector(
-                    ITokenRelayer.transferERC20From.selector, tx.origin, addressVar, inAmount));
-        }
-
-        // nested intent
-        if (uintVar == 1) {
-            require(lengthVar + 40 <= intent.length, "Invalid nested intent");
-            sender = address(bytes20(intent[lengthVar : lengthVar + 20]));
-            unpackedInstructions[1] = abi.encode(
-                sender,
-                uint256(0),
-                abi.encodeWithSelector(IACCOUNT_EXECUTE_USER_INTENT_SELECTOR, intent[lengthVar :]));
+                    ITokenRelayer.transferERC20From.selector, tx.origin, addressVar, uint256Var));
         }
 
         unpackedInstructions[2 + uintVar] = abi.encode(
             address(this), 0, abi.encodeWithSelector(this.markAmount.selector, hash, orderAmount));
+
+        // nested intents
+        if (uintVar > 0) {
+            lengthVar += 1;
+            uintVar = 1;  // index of nested intent starts from 1 because 0 is out token instruction
+            while (uintVar <= unpackedInstructions.length - 3) {
+                require(lengthVar + 46 <= intent.length, "Invalid nested intent");
+                uint256Var = PackedIntent.getIntentLengthFromSection(bytes6(intent[lengthVar + 40 : lengthVar + 46]));  // nested intent length
+                sender = address(bytes20(intent[lengthVar : lengthVar + 20]));
+                unpackedInstructions[uintVar] = abi.encode(
+                    sender,
+                    uint256(0),
+                    abi.encodeWithSelector(IACCOUNT_EXECUTE_USER_INTENT_SELECTOR, intent[lengthVar : lengthVar + uint256Var]));
+                lengthVar += uint256Var;
+                uintVar ++;
+            }
+        }
 
         return (VALIDATION_APPROVED, unpackedInstructions);
     }
@@ -247,6 +245,21 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
         return (intent, intentHash, solverHash);
+    }
+
+    function sampleCompoundIntent(
+        bytes calldata origin,
+        bytes[] calldata inners
+    ) external pure returns (bytes memory) {
+        bytes memory result = origin;
+        uint8 size = uint8(inners.length);
+        result = bytes.concat(result, bytes1(size));
+
+        for (uint8 i = 0; i < size; i++) {
+            result = bytes.concat(result, inners[i]);
+        }
+
+        return result;
     }
 
     function executeUserIntent(bytes calldata intent) external returns (bytes memory) {

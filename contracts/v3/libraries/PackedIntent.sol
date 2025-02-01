@@ -17,16 +17,6 @@ library PackedIntent {
         return (address(bytes20(intent[: 20])), address(bytes20(intent[20 : 40])));
     }
 
-    function getSenderAndStandardAssembly(bytes calldata intent) external pure returns (address sender, address standard) {
-        require(intent.length >= 40, "Intent too short");
-        assembly {
-            sender := shr(96, calldataload(intent.offset))
-            standard := shr(96, calldataload(add(intent.offset, 20))) // Load 20 bytes starting at offset 20
-        }
-
-        return (sender, standard);
-    }
-
     function getLengths(bytes calldata intent) external pure returns (uint256, uint256, uint256) {
         require(intent.length >= 46, "Missing length section");
         return (
@@ -34,5 +24,28 @@ library PackedIntent {
             uint256(uint16(bytes2(intent[42 : 44]))),
             uint256(uint16(bytes2(intent[44 : 46])))
         );
+    }
+
+    function getSignatureLength(bytes calldata intent) external pure returns (uint256) {
+        require(intent.length >= 46, "Missing length section");
+        return uint256(uint16(bytes2(intent[44 : 46])));
+    }
+
+    function getIntentLength(bytes calldata intent) external pure returns (uint256) {
+        require(intent.length >= 46, "Missing length section");
+        uint256 headerLength = uint256(uint16(bytes2(intent[40 : 42])));
+        uint256 instructionLength = uint256(uint16(bytes2(intent[42 : 44])));
+        uint256 signatureLength = uint256(uint16(bytes2(intent[44 : 46])));
+        return headerLength + instructionLength + signatureLength + 46;
+    }
+
+    function getIntentLengthFromSection(bytes6 lengthSection) external pure returns (uint16 result) {
+        assembly {
+            let value := lengthSection
+            let a := shr(240, value) // Extract first 2 bytes
+            let b := and(shr(224, value), 0xFFFF) // Extract next 2 bytes
+            let c := and(shr(208, value), 0xFFFF) // Extract last 2 bytes
+            result := add(add(add(a, b), c), 46)
+        }
     }
 }

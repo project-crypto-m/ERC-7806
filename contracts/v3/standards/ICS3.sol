@@ -87,7 +87,7 @@ contract ICS3 is HashGatedStandard, BaseTokenRelayer {
     function unpackOperations(bytes calldata intent) external view returns (bytes4, bytes[] memory) {
         (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
         require(standard == address(this), "Not this standard");
-        (, , uint256 sLen) = PackedIntent.getLengths(intent);
+        uint256 sLen = PackedIntent.getSignatureLength(intent);
 
         // fetch header content
         // nonce = uint32(bytes4(intent[46:50]));  // we don't need to parse nonce
