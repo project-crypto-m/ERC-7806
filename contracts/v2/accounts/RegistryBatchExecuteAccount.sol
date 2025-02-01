@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {StandardRegistry} from "./../StandardRegistry.sol";
+import {StandardRegistry} from "./../../StandardRegistry.sol";
 import {UserIntent} from "./../interfaces/UserIntent.sol";
 import {IStandard} from "./../interfaces/IStandard.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
@@ -20,10 +20,8 @@ contract RegistryBatchExecuteAccount is IAccount {
         require(intent.sender == address(this), "Not intent sender");
         require(REGISTRY.isRegistered(address(this), intent.standard), "Standard not registered");
 
-        // standard validation
-        IStandard standard = IStandard(intent.standard);
-        (bytes memory validationResult, bytes[] memory instructions) = standard.unpackOperations(intent);
-        (bytes4 validationCode) = abi.decode(validationResult, (bytes4));
+        // standard validation and unpack
+        (bytes4 validationCode, bytes[] memory instructions) = IStandard(intent.standard).unpackOperations(intent);
         require(validationCode == VALIDATION_APPROVED, "Validation failed");
 
         // batch execute
