@@ -15,7 +15,7 @@ abstract contract SelfExecutableAccount is IAccount {
             return executeSelfIntent(intent);
         }
 
-        return this.executeOtherIntent(intent, standard);
+        return executeOtherIntent(intent, standard);
     }
 
     function executeSelfIntent(bytes calldata intent) internal returns (bytes memory) {
@@ -59,7 +59,7 @@ abstract contract SelfExecutableAccount is IAccount {
         return new bytes(0);
     }
 
-    function executeOtherIntent(bytes calldata intent, address standard) external virtual returns (bytes memory);
+    function executeOtherIntent(bytes calldata intent, address standard) internal virtual returns (bytes memory);
 
     function sampleSelfIntent(
         address account,

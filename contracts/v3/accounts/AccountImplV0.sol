@@ -16,7 +16,7 @@ contract AccountImplV0 is SelfExecutableAccount {
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
 
-    function executeOtherIntent(bytes calldata intent, address standard) override external returns (bytes memory) {
+    function executeOtherIntent(bytes calldata intent, address standard) override internal returns (bytes memory) {
         require(REGISTRY.isRegistered(address(this), standard), "Standard not registered");
         // standard validation and unpack
         (bytes4 validationCode, bytes[] memory instructions) = IStandard(standard).unpackOperations(intent);
