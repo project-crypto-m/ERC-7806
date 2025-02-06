@@ -1,29 +1,74 @@
-/* solhint-disable func-name-mixedcase */
-/* solhint-disable const-name-snakecase */
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
-import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
 import {PackedIntent} from "./../../../../contracts/v3/libraries/PackedIntent.sol";
 
 contract PackedIntentTest is Test {
-    using ECDSA for bytes32;
-
-    address public account;
-    uint256 public accountKey;
-
-    function setUp() public {
-        (account, accountKey) = makeAddrAndKey("account");
+    function testGetSenderAndStandard() public {
+        bytes memory intent = bytes.concat(bytes20(address(0x1234)), bytes20(address(0x5678)));
+        (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
+        assertEq(sender, address(0x1234));
+        assertEq(standard, address(0x5678));
     }
 
-    function testParseSenderAndStandard() public {
-        bytes memory intent = hex"f9e83046f680fe111646aed7836fdaff5e50770af9e83046f680fe111646aed7836fdaff5e50770a00040199000001840184f952e19c66cbb9ce5c3bfd7b91bad8a0f3ac12f9010000000000000000000000000000000000000000000000000000000000000020f35994ce00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000138f952e19c66cbb9ce5c3bfd7b91bad8a0f3ac12f97c86a8ab0ebd3a5a2d094b06dabcd1796a28aa77002000680082000004d200000000697457a18cdc2a39118717e04b9efbc1b8ef66ea2a754843e022b6aaf32d52ce8ecc06330c6858b2c0092b9300000000000000000000000000000000000000000000000000000000000000169b069fff55acd8668225021e2142e432031cb0cd000000000000000000000000000000000000000000000000000000000000000b6935bac4614d9fa2a4436edccc6bc57ca1177030dca7dad3ab7c8195f667f60f5bc91e0191e55e0a139a5e09e51437f007ee43047bbcf8238a62a533294cc0fa1c47aec196cbe64977701d2893e9039e93dab6ae0594aceca23d403fad419460914647cc8542ad47ba82becf4e925498d528847fbd6b1bfcb93fd549b7a32032621c0000000000000000f952e19c66cbb9ce5c3bfd7b91bad8a0f3ac12f900f35994ce00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000138f952e19c66cbb9ce5c3bfd7b91bad8a0f3ac12f97c86a8ab0ebd3a5a2d094b06dabcd1796a28aa77002000680082000004d200000000697457a18cdc2a39118717e04b9efbc1b8ef66ea2a754843e022b6aaf32d52ce8ecc06330c6858b2c0092b9300000000000000000000000000000000000000000000000000000000000000169b069fff55acd8668225021e2142e432031cb0cd000000000000000000000000000000000000000000000000000000000000000b6935bac4614d9fa2a4436edccc6bc57ca1177030dca7dad3ab7c8195f667f60f5bc91e0191e55e0a139a5e09e51437f007ee43047bbcf8238a62a533294cc0fa1c47aec196cbe64977701d2893e9039e93dab6ae0594aceca23d403fad419460914647cc8542ad47ba82becf4e925498d528847fbd6b1bfcb93fd549b7a32032621c0000000000000000";
+    function testGetSenderAndStandard_Fail_ShortIntent() public {
+        bytes memory intent = bytes.concat(bytes20(address(0x1234)));
+        vm.expectRevert("Intent too short");
+        PackedIntent.getSenderAndStandard(intent);
+    }
 
-        (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
-        assertEq(address(0xf9e83046F680FE111646AeD7836fDAFF5E50770A), sender);
-        assertEq(address(0xf9e83046F680FE111646AeD7836fDAFF5E50770A), standard);
+    function testGetLengths() public {
+        bytes memory intent = bytes.concat(
+            bytes20(address(0x1234)),
+            bytes20(address(0x5678)),
+            bytes2(uint16(10)),
+            bytes2(uint16(20)),
+            bytes2(uint16(30))
+        );
+        (uint256 headerLength, uint256 instructionLength, uint256 signatureLength) = PackedIntent.getLengths(intent);
+        assertEq(headerLength, 10);
+        assertEq(instructionLength, 20);
+        assertEq(signatureLength, 30);
+    }
+
+    function testGetLengths_Fail_ShortIntent() public {
+        bytes memory intent = bytes.concat(
+            bytes20(address(0x1234)),
+            bytes20(address(0x5678)),
+            bytes2(uint16(10))
+        );
+        vm.expectRevert("Missing length section");
+        PackedIntent.getLengths(intent);
+    }
+
+    function testGetSignatureLength() public {
+        bytes memory intent = bytes.concat(
+            bytes20(address(0x1234)),
+            bytes20(address(0x5678)),
+            bytes2(uint16(10)),
+            bytes2(uint16(20)),
+            bytes2(uint16(40))
+        );
+        uint256 signatureLength = PackedIntent.getSignatureLength(intent);
+        assertEq(signatureLength, 40);
+    }
+
+    function testGetIntentLength() public {
+        bytes memory intent = bytes.concat(
+            bytes20(address(0x1234)),
+            bytes20(address(0x5678)),
+            bytes2(uint16(10)),
+            bytes2(uint16(20)),
+            bytes2(uint16(30))
+        );
+        uint256 intentLength = PackedIntent.getIntentLength(intent);
+        assertEq(intentLength, 10 + 20 + 30 + 46);
+    }
+
+    function testGetIntentLengthFromSection() public {
+        bytes6 lengthSection = bytes6(bytes.concat(bytes2(uint16(10)), bytes2(uint16(20)), bytes2(uint16(30))));
+        uint16 result = PackedIntent.getIntentLengthFromSection(lengthSection);
+        assertEq(result, 10 + 20 + 30 + 46);
     }
 }
