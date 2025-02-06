@@ -11,7 +11,7 @@ import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {AmountGatedStandard} from "./AmountGatedStandard.sol";
 import {BaseTokenRelayer} from "./../BaseTokenRelayer.sol";
 
-contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
+contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     using ECDSA for bytes32;
 
     string public constant ICS_NUMBER = "ICS6";
@@ -41,18 +41,18 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         require(signatureLen + uintVar3 <= intent.length, "Not enough intent length");
 
         // fetch header content
-        // nonce = uint32(bytes4(intent[47:50]));  // we don't need to parse nonce
+        // salt = uint24(bytes3(intent[48:50]));  // we don't need to parse salt
         uintVar1 = uint256(uint64(bytes8(intent[50 : 58])));
         // timestamp
         require(uintVar1 >= block.timestamp, "Intent expired");
 
         // validate out token instruction
-        addressVar = address(bytes20(intent[78 : 98]));
         // after header
+        addressVar = address(bytes20(intent[78 : 98]));
+        // max out token amount
         uintVar1 = uint256(uint128(bytes16(intent[98 : 114])));
-        // max amount
-        uintVar2 = isFullOrder ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
         // amount for this oder
+        uintVar2 = isFullOrder ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
         if (addressVar != address(0)) {
             try IERC20(addressVar).balanceOf(sender) returns (uint256 balance) {
                 require(balance >= uintVar2, "Insufficient token balance");
@@ -63,8 +63,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
             require(sender.balance >= uintVar2, "Insufficient eth balance");
         }
 
+        // after outToken ins is the inToken instruction
         addressVar = address(bytes20(intent[114 : 134]));
-        // after outToken ins
         if (addressVar != address(0)) {
             // check if in token is ERC20
             try IERC20(addressVar).totalSupply() {
@@ -91,15 +91,20 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
         require(addressVar == address(this), "Not this standard");
         bool isFullOrder = bytes1(intent[46 : 47]) == bytes1(0x01);
-        uint256 lengthVar = isFullOrder? 150 : 166;  // signature offset
+        // signature offset
+        uint256 lengthVar = isFullOrder ? 150 : 166;
 
         // fetch header content
-        // nonce = uint32(bytes4(intent[47:50]));  // we don't need to parse nonce
-        require(uint256(uint64(bytes8(intent[50 : 58]))) >= block.timestamp, "Intent expired");  // timestamp
-        // because solver != address(0), this numUsedSig can only be 1 or 2
+        // salt = uint24(bytes3(intent[48:50]));  // we don't need to parse salt
+        // timestamp
+        require(uint256(uint64(bytes8(intent[50 : 58]))) >= block.timestamp, "Intent expired");
         (uint8 uintVar, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, lengthVar);
-        lengthVar = uintVar == 1 ? lengthVar + 65 : lengthVar + 130;  // total length of this intent
-        uintVar = intent.length == lengthVar ? 0 : uint8(bytes1(intent[lengthVar: lengthVar + 1]));  // # of nested intents
+        // solver != address(0), this numUsedSig should only be 1 or 2
+        require(uintVar != 0, "Solver is not assigned");
+        // total length of this intent
+        lengthVar = uintVar == 1 ? lengthVar + 65 : lengthVar + 130;
+        // # of nested intents
+        uintVar = intent.length == lengthVar ? 0 : uint8(bytes1(intent[lengthVar : lengthVar + 1]));
 
         // total instructions = transfer out + nestIntents execution (optional) + transfer in + mark nonce
         unpackedInstructions = new bytes[](3 + uintVar);
@@ -119,7 +124,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         }
 
         addressVar = address(bytes20(intent[114 : 134]));
-        uint256 uint256Var = uint256(uint128(bytes16(intent[134 : 150])));  // in amount of this order
+        uint256 uint256Var = uint256(uint128(bytes16(intent[134 : 150])));
+        // in amount of this order
         uint256Var = isFullOrder ? uint256Var : uint256Var * orderAmount / maxAmount;
         // can't take in 0 amount
         uint256Var = uint256Var > 0 ? uint256Var : 1;
@@ -140,10 +146,12 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         // nested intents
         if (uintVar > 0) {
             lengthVar += 1;
-            uintVar = 1;  // index of nested intent starts from 1 because 0 is out token instruction
+            uintVar = 1;
+            // index of nested intent starts from 1 because 0 is out token instruction
             while (uintVar <= unpackedInstructions.length - 3) {
                 require(lengthVar + 46 <= intent.length, "Invalid nested intent");
-                uint256Var = PackedIntent.getIntentLengthFromSection(bytes6(intent[lengthVar + 40 : lengthVar + 46]));  // nested intent length
+                uint256Var = PackedIntent.getIntentLengthFromSection(bytes6(intent[lengthVar + 40 : lengthVar + 46]));
+                // nested intent length
                 sender = address(bytes20(intent[lengthVar : lengthVar + 20]));
                 unpackedInstructions[uintVar] = abi.encode(
                     sender,
@@ -162,7 +170,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
     ) internal view returns (uint8, uint256) {
         bytes32 intentHash = keccak256(abi.encode(intent[46 : 150], address(this), block.chainid));
         bytes32 messageHash = MessageHashUtils.toEthSignedMessageHash(intentHash);
-        uint256 uintVar2 = uintVar1 + 65;  // first signature ends
+        uint256 uintVar2 = uintVar1 + 65;
+        // first signature ends
         require(sender == messageHash.recover(intent[uintVar1 : uintVar2]), "Invalid sender signature");
 
         // solver is not determined, no need to check solver signature
@@ -178,7 +187,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         }
 
         // solver signs with assigned relayer
-        uintVar1 += 130;  // second signature ends
+        uintVar1 += 130;
+        // second signature ends
         require(intent.length >= uintVar1, "At least 2 signatures are needed to assign relayer");
         bytes32 solverHash = keccak256(abi.encode(intentHash, tx.origin));
         messageHash = MessageHashUtils.toEthSignedMessageHash(solverHash);
@@ -214,8 +224,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         uint16 instructionLength = isFullOrder ? 72 : 88;
 
         intent = isFullOrder ?
-            bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-            bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
+        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
+        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
         intentHash = keccak256(abi.encode(toSign, address(this), block.chainid));
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
@@ -239,8 +249,8 @@ contract PartialTokenSwapOrderIntent is AmountGatedStandard, BaseTokenRelayer {
         uint16 instructionLength = isFullOrder ? 72 : 88;
 
         intent = isFullOrder ?
-            bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-            bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
+        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
+        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
         intentHash = keccak256(abi.encode(toSign, address(this), block.chainid));
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
