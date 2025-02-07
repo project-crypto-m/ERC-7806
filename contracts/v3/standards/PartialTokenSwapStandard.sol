@@ -22,7 +22,6 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_APPROVED_SENDER_ONLY = 0x00000002;
-    bytes4 public constant ERC20_TRANSFER_SELECTOR = IERC20.transfer.selector;
     bytes4 public constant IACCOUNT_EXECUTE_USER_INTENT_SELECTOR = IAccount.executeUserIntent.selector;
 
     function validateUserIntent(bytes calldata intent) external view returns (bytes4) {
@@ -30,15 +29,16 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         require(addressVar == address(this), "Not this standard");
         (uint256 uintVar1, uint256 uintVar2, uint256 signatureLen) = PackedIntent.getLengths(intent);
         require(uintVar1 == 32, "Invalid header length");
-        bool isFullOrder = bytes1(intent[46 : 47]) == bytes1(0x01);
-        if (isFullOrder) {
+        require(intent.length >= 78 + uintVar2 + signatureLen, "Not enough intent length");
+        // isFullOrder
+        bool booleanVar = bytes1(intent[46 : 47]) == bytes1(0x01);
+        if (booleanVar) {
             require(uintVar2 == 72, "Invalid full order instruction length");
         } else {
             require(uintVar2 == 88, "Invalid partial order instruction length");
         }
         uint256 uintVar3 = 78 + uintVar2;
         require(signatureLen == 65 || signatureLen == 130, "Invalid signature length");
-        require(signatureLen + uintVar3 <= intent.length, "Not enough intent length");
 
         // fetch header content
         // salt = uint24(bytes3(intent[48:50]));  // we don't need to parse salt
@@ -52,13 +52,16 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         // max out token amount
         uintVar1 = uint256(uint128(bytes16(intent[98 : 114])));
         // amount for this oder
-        uintVar2 = isFullOrder ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
+        uintVar2 = booleanVar ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
         if (addressVar != address(0)) {
-            try IERC20(addressVar).balanceOf(sender) returns (uint256 balance) {
-                require(balance >= uintVar2, "Insufficient token balance");
-            } catch {
+            bytes memory data;
+            (booleanVar, data) = addressVar.staticcall(
+                abi.encodeWithSelector(IERC20.balanceOf.selector, sender)
+            );
+            if (!booleanVar || data.length != 32) {
                 revert("Not ERC20 token");
             }
+            require(abi.decode(data, (uint256)) >= uintVar2, "Insufficient token balance");
         } else {
             require(sender.balance >= uintVar2, "Insufficient eth balance");
         }
@@ -66,10 +69,11 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         // after outToken ins is the inToken instruction
         addressVar = address(bytes20(intent[114 : 134]));
         if (addressVar != address(0)) {
-            // check if in token is ERC20
-            try IERC20(addressVar).totalSupply() {
-                // no op
-            } catch {
+            bytes memory data;
+            (booleanVar, data) = addressVar.staticcall(
+                abi.encodeWithSelector(IERC20.totalSupply.selector, sender)
+            );
+            if (!booleanVar || data.length != 32) {
                 revert("Not ERC20 token");
             }
         }
@@ -120,7 +124,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
             unpackedInstructions[0] = abi.encode(
                 addressVar,
                 uint256(0),
-                abi.encodeWithSelector(ERC20_TRANSFER_SELECTOR, address(tx.origin), orderAmount));
+                abi.encodeWithSelector(IERC20.transfer.selector, address(tx.origin), orderAmount));
         }
 
         addressVar = address(bytes20(intent[114 : 134]));
