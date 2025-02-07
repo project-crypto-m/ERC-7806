@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {ITokenRelayer} from "./interfaces/ITokenRelayer.sol";
 
-abstract contract BaseTokenRelayer is ITokenRelayer {
+contract BaseTokenRelayer is ITokenRelayer {
     function transferEth(uint256 amount) external {
         require(address(this).balance >= amount, "Insufficient balance");
-        bool success = payable(msg.sender).send(amount);
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Failed to send Ether");
     }
 
@@ -22,7 +22,8 @@ abstract contract BaseTokenRelayer is ITokenRelayer {
             bool success = IERC20(token).transferFrom(from, msg.sender, amount);
             require(success, "Failed to send ERC20");
         } else {
-            this.transferERC20(token, amount);
+            bool success = IERC20(token).transfer(msg.sender, amount);
+            require(success, "Failed to send ERC20");
         }
     }
 
