@@ -37,7 +37,6 @@ contract ICS4Test is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // order limit exceed
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
 
         bytes4 code = standard.validateUserIntent(intent);
