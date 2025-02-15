@@ -11,6 +11,44 @@ import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {AmountGatedStandard} from "./AmountGatedStandard.sol";
 import {BaseTokenRelayer} from "./../BaseTokenRelayer.sol";
 
+/*
+PartialTokenSwapStandard
+
+This standard allows sender to defines an order that swaps 2 tokens (native or ERC20). It is amount and time gated,
+meaning the intent can only be executed before a timestamp (expiration) or before the amount is fulfilled.
+
+The first 20 bytes of the `intent` is sender address.
+The next 20 bytes of the `intent` is the standard address, which should be equal to address of this standard.
+The following is the length section, containing 3 uint16 defining header length, instructions length and signature length.
+
+The header is fixed to be 32 bytes long.
+The first 1 byte (uint8) is either "0x0" or "0x1", representing partial order and full order.
+The next 3 bytes (uint24) are a random nonce to allow users placing the same order multiple times.
+The following 8 bytes (uint64) are the timestamp in epoch seconds.
+The last 20 bytes (address) are the solver of this intent.
+- if the solver is the sender, then any body can relay the intent.
+- if the solver is not the sender, then the sender needs to provide a signature as well and only a specific relayer can
+execute this intent on-chain.
+
+The instructions contains 3 main part.
+The first 36 bytes are packed encoded (address, uint128) pair representing the token and maximum amount the sender is
+willing to send out.
+The next 36 bytes are packed encoded (address, uint128) pair representing the token and amount the sender will get back
+when the out amount is at max.
+The following 16 bytes (uint128) are the out token amount of this execution. Only partial order needs this and this field
+is filled in by the solver.
+
+The signature field is 65 bytes long if the intent solver is sender, 130 bytes long if the intent solver is not the sender.
+
+This intent allows nested intents to follow it, the first byte (uint8) after the intent body defines the number of
+nested intents. Then the first 2-bytes of each nested intent defines the total length of the corresponding intent.
+
+When executing, the operations will be carried out in the following order
+- mark amount
+- transfer out token with amount to the relayer
+- execute nested intents (if any)
+- transfer in token back from the relayer
+*/
 contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     using ECDSA for bytes32;
 
