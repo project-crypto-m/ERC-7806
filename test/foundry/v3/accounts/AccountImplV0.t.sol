@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "../../../../contracts/test/TestERC20.sol";
+import "forge-std/Test.sol";
+import {AccountImplV0} from "./../../../../contracts/v3/accounts/AccountImplV0.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {IStandard} from "./../../../../contracts/v3/interfaces/IStandard.sol";
+import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
+import {PartialTokenSwapStandard} from  "./../../../../contracts/v3/standards/PartialTokenSwapStandard.sol";
+import {StandardRegistry} from "./../../../../contracts/StandardRegistry.sol";
+import {TestERC20} from "./../../../../contracts/test/TestERC20.sol";
+
+
+contract MockAccountImplV0 is AccountImplV0 {
+    function tryExecuteOtherIntent(bytes calldata intent, address standard) external returns (bytes memory) {
+        return executeOtherIntent(intent, standard);
+    }
+}
+
+
+contract AccountImplV0Test is Test {
+    TestERC20 public erc20;
+    StandardRegistry public registry;
+    PartialTokenSwapStandard public partialTokenSwapStandard;
+    MockAccountImplV0 public mockAccountImplV0;
+    bytes4 public constant VALIDATION_APPROVED = 0x00000001;
+    bytes4 public constant VALIDATION_DENIED = 0x00000000;
+    address public user;
+    uint256 public userKey;
+
+
+    function setUp() public {
+        erc20 = new TestERC20();
+
+        // enforce StandardRegistry at 0xa6673924437D5864488CEC4B8fa1654226bb1E8D
+        StandardRegistry mockRegistry = new StandardRegistry();
+        address registryAddress = 0xa6673924437D5864488CEC4B8fa1654226bb1E8D;
+        vm.etch(registryAddress, address(mockRegistry).code);
+        registry = StandardRegistry(0xa6673924437D5864488CEC4B8fa1654226bb1E8D);
+
+
+        // register standard using registry.update
+        partialTokenSwapStandard = new PartialTokenSwapStandard();
+        (user, userKey) = makeAddrAndKey("account");
+        mockAccountImplV0 = new MockAccountImplV0();
+
+        bool registering = true;
+        uint256 nonce = 123;
+        vm.prank(address(mockAccountImplV0));
+        registry.update(registering, address(partialTokenSwapStandard), nonce);
+        require(registry.isRegistered(address(mockAccountImplV0), address(partialTokenSwapStandard)), "not registered");
+    }
+
+    function testExecuteOtherIntent() public {
+        erc20.mint(address(mockAccountImplV0), 1);
+        erc20.mint(tx.origin, 1);
+        vm.startPrank(tx.origin);
+        erc20.approve(address(partialTokenSwapStandard), 1);
+
+        // construct intent to send 1 erc20 from user
+        bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(user)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bytes32 intentHash = keccak256(abi.encode(content, address(partialTokenSwapStandard), block.chainid));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory intent = bytes.concat(bytes20(address(user)), bytes20(address(partialTokenSwapStandard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
+
+        vm.startPrank(user);
+        bytes memory result = mockAccountImplV0.tryExecuteOtherIntent(intent, address(partialTokenSwapStandard));
+        assertEq(result, new bytes(0));
+    }
+}
