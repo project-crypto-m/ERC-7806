@@ -23,7 +23,7 @@ The following is the length section, containing 3 uint16 defining header length,
 
 The header is fixed to be 32 bytes long.
 The first 1 byte (uint8) is either "0x0" or "0x1", representing partial order and full order.
-The next 3 bytes (uint24) are a random nonce to allow users placing the same order multiple times.
+The next 3 bytes (uint24) are a random salt to allow users placing the same order multiple times.
 The following 8 bytes (uint64) are the timestamp in epoch seconds.
 The last 20 bytes (address) are the solver of this intent.
 - if the solver is the sender, then any body can relay the intent.
@@ -54,12 +54,31 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
 
     string public constant ICS_NUMBER = "ICS6";
     string public constant DESCRIPTION = "Timed Hashed Pre-Delegated Partial ERC20 Token Swap Standard";
-    string public constant VERSION = "0.0.0";
+    string public constant VERSION = "0.1.0";
     string public constant AUTHOR = "hellohanchen";
 
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_APPROVED_SENDER_ONLY = 0x00000002;
+
+    bytes32 public immutable DOMAIN_SEPARATOR;
+    bytes32 public immutable SIGNED_DATA_TYPEHASH;
+
+    constructor() {
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes("PartialTokenSwapStandard")),
+                keccak256(bytes("0.1.0")),
+                block.chainid,
+                address(this)
+            )
+        );
+
+        SIGNED_DATA_TYPEHASH = keccak256(
+            "Order(bool isFullOrder,uint24 salt,uint64 expiration,address solver,address outToken,uint128 outAmount,address inToken,uint128 inAmount)"
+        );
+    }
 
     function validateUserIntent(bytes calldata intent) external view returns (bytes4) {
         (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
@@ -216,8 +235,20 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     function _validateSignatures(
         address sender, address solver, bytes calldata intent, uint256 indexVar
     ) internal view returns (uint8, uint256) {
-        bytes32 intentHash = keccak256(abi.encode(intent[46 : 150], address(this), block.chainid));
-        bytes32 messageHash = MessageHashUtils.toEthSignedMessageHash(intentHash);
+        bytes32 intentHash = keccak256(
+            abi.encode(
+                SIGNED_DATA_TYPEHASH,
+                bytes1(intent[46 : 47]) == bytes1(0x01), // isFullOrder
+                uint24(bytes3(intent[47 : 50])), // salt
+                uint64(bytes8(intent[50 : 58])), // expiration
+                solver,
+                address(bytes20(intent[78 : 98])), // outToken
+                uint128(bytes16(intent[98 : 114])), // outAmount
+                address(bytes20(intent[114 : 134])), // inToken
+                uint128(bytes16(intent[134 : 150]))  // inAmount
+            )
+        );
+        bytes32 messageHash = MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash);
         uint256 firstSigEnd = indexVar + 65;
         // first signature ends
         require(sender == messageHash.recover(intent[indexVar : firstSigEnd]), "Invalid sender signature");
@@ -264,8 +295,9 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     ) {
         uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
         bool isFullOrder = orderAmount == maxAmount;
+        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
         bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF), solver)),
+            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
             abi.encodePacked(outTokenAddress, maxAmount),
             abi.encodePacked(inTokenAddress, maxInAmount)
         );
@@ -274,7 +306,20 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         intent = isFullOrder ?
         bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
         bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-        intentHash = keccak256(abi.encode(toSign, address(this), block.chainid));
+
+        intentHash = keccak256(
+            abi.encode(
+                SIGNED_DATA_TYPEHASH,
+                isFullOrder, // isFullOrder
+                uint24(0), // salt
+                expiration, // expiration
+                solver,
+                outTokenAddress, // outToken
+                maxAmount, // outAmount
+                inTokenAddress, // inToken
+                maxInAmount  // inAmount
+            )
+        );
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
         return (intent, intentHash, solverHash);
@@ -289,8 +334,9 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     ) {
         uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
         bool isFullOrder = orderAmount == maxAmount;
+        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
         bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF), solver)),
+            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
             abi.encodePacked(outTokenAddress, maxAmount),
             abi.encodePacked(inTokenAddress, maxInAmount)
         );
@@ -299,7 +345,20 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         intent = isFullOrder ?
         bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
         bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-        intentHash = keccak256(abi.encode(toSign, address(this), block.chainid));
+
+        intentHash = keccak256(
+            abi.encode(
+                SIGNED_DATA_TYPEHASH,
+                isFullOrder, // isFullOrder
+                uint24(0), // salt
+                expiration, // expiration
+                solver,
+                outTokenAddress, // outToken
+                maxAmount, // outAmount
+                inTokenAddress, // inToken
+                maxInAmount  // inAmount
+            )
+        );
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
         return (intent, intentHash, solverHash);

@@ -10,10 +10,7 @@ contract StandardRegistryV2 {
     event StandardRegistered(address, address);
     event StandardUnregistered(address, address);
 
-    // Define EIP-712 Domain Separator (unique per contract)
     bytes32 public immutable DOMAIN_SEPARATOR;
-
-    // Define the struct type hash (EIP-712 encoding)
     bytes32 public immutable SIGNED_DATA_TYPEHASH;
 
     mapping(bytes32 => bool) _nonces;
@@ -39,20 +36,11 @@ contract StandardRegistryV2 {
         bytes32 compositeKey = keccak256(abi.encodePacked(signer, nonce));
         require(!_nonces[compositeKey], "Invalid nonce");
 
-        // Hash the structured message
+        // validate signature
         bytes32 structHash = keccak256(
-            abi.encode(
-                SIGNED_DATA_TYPEHASH,
-                registering,
-                standard,
-                nonce
-            )
+            abi.encode(SIGNED_DATA_TYPEHASH, registering, standard, nonce)
         );
-
-        // Create the final EIP-712 message hash
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-
-        // Recover signer from signature
+        bytes32 digest = MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, structHash);
         require(signer == digest.recover(signature), "Invalid signature");
 
         _process(registering, signer, standard, nonce);

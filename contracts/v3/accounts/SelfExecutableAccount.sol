@@ -28,10 +28,8 @@ abstract contract SelfExecutableAccount is IAccount {
 
         address dest;
         bytes1 hasValue;
-        uint256 value;
         bool success;
         uint16 dataLength;
-        bytes memory executeData;
 
         for (uint256 i = 0; i < headerLength; i += 2) {
             dataLength = uint16(bytes2(intent[46 + i : 48 + i]));

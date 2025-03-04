@@ -30,11 +30,19 @@ contract ICS4Test is Test {
     function test_validateIntent_success() public {
         erc20.mint(account, 1);
 
-        // no solver assigned
-        bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(0x0)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = false;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(0x0);
+        address tokenAddress = address(erc20);
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        // no solver assigned
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(1)), bytes20(tokenAddress), bytes16(uint128(0)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(1), tokenAddress, uint128(0))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
 
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
@@ -43,10 +51,13 @@ contract ICS4Test is Test {
         assertEq(code, standard.VALIDATION_APPROVED_SENDER_ONLY());
 
         // self-solved
-        content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(account)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
+        solverAddress = address(account);
+        content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(1)), bytes20(tokenAddress), bytes16(uint128(0)));
 
-        intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(1), tokenAddress, uint128(0))
+        );
+        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         signature = abi.encodePacked(r, s, v);
 
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
@@ -55,16 +66,19 @@ contract ICS4Test is Test {
         assertEq(code, standard.VALIDATION_APPROVED());
 
         // with solver
-        content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(solver)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
+        solverAddress = address(solver);
+        content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(1)), bytes20(tokenAddress), bytes16(uint128(0)));
 
-        intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(1), tokenAddress, uint128(0))
+        );
+        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         signature = abi.encodePacked(r, s, v);
 
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(130)), content, bytes16(uint128(1)), signature);
 
-        intentHash = keccak256(abi.encode(intentHash, address(0)));
-        (v, r, s) = vm.sign(solverKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        bytes32 solverHash = keccak256(abi.encode(intentHash, address(0)));
+        (v, r, s) = vm.sign(solverKey, MessageHashUtils.toEthSignedMessageHash(solverHash));
         signature = abi.encodePacked(r, s, v);
         intent = bytes.concat(intent, signature);
 
@@ -135,10 +149,18 @@ contract ICS4Test is Test {
     }
 
     function test_validateIntent_failure_signatures() public {
-        bytes memory content = bytes.concat(bytes1(0x01), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(solver)), bytes20(address(erc20)), bytes16(uint128(0)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = true;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(solver);
+        address tokenAddress = address(erc20);
+
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(0)), bytes20(tokenAddress), bytes16(uint128(0)));
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, new bytes(200));
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(0), tokenAddress, uint128(0))
+        );
 
         // not a signature
         vm.expectRevert();
@@ -153,22 +175,18 @@ contract ICS4Test is Test {
         standard.validateUserIntent(intent);
 
         // at least 2 signature needed
-        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         signature = abi.encodePacked(r, s, v);
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, signature);
         vm.expectRevert("At least 2 signatures are needed to assign relayer");
         standard.validateUserIntent(intent);
 
         // not a solver signature
-        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
-        signature = abi.encodePacked(r, s, v);
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, signature, new bytes(200));
         vm.expectRevert();
         standard.validateUserIntent(intent);
 
         // invalid solver signature
-        (v, r, s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
-        signature = abi.encodePacked(r, s, v);
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, signature, signature);
         vm.expectRevert("Invalid solver signature");
         standard.validateUserIntent(intent);
@@ -177,10 +195,18 @@ contract ICS4Test is Test {
     function test_validateIntent_failure_afterSig() public {
         erc20.mint(account, 1);
 
-        bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(account)), bytes20(address(erc20)), bytes16(uint128(0)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = false;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(account);
+        address tokenAddress = address(erc20);
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(0)), bytes20(tokenAddress), bytes16(uint128(0)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(0), tokenAddress, uint128(0))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // only 1 signature is needed
