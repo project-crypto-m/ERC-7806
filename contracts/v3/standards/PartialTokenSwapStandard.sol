@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
@@ -60,7 +60,6 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_APPROVED_SENDER_ONLY = 0x00000002;
-    bytes4 public constant IACCOUNT_EXECUTE_USER_INTENT_SELECTOR = IAccount.executeUserIntent.selector;
 
     function validateUserIntent(bytes calldata intent) external view returns (bytes4) {
         (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
@@ -93,9 +92,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         uintVar2 = booleanVar ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
         if (addressVar != address(0)) {
             bytes memory data;
-            (booleanVar, data) = addressVar.staticcall(
-                abi.encodeWithSelector(IERC20.balanceOf.selector, sender)
-            );
+            (booleanVar, data) = addressVar.staticcall(abi.encodeCall(IERC20.balanceOf, (sender)));
             if (!booleanVar || data.length != 32) {
                 revert("Not ERC20 token");
             }
@@ -108,9 +105,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         addressVar = address(bytes20(intent[114 : 134]));
         if (addressVar != address(0)) {
             bytes memory data;
-            (booleanVar, data) = addressVar.staticcall(
-                abi.encodeWithSelector(IERC20.totalSupply.selector, sender)
-            );
+            (booleanVar, data) = addressVar.staticcall(abi.encodeCall(IERC20.totalSupply, ()));
             if (!booleanVar || data.length != 32) {
                 revert("Not ERC20 token");
             }
@@ -161,16 +156,16 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
 
         // first instruction is mark amount to prevent re-entry attack
         unpackedInstructions[0] = abi.encode(
-            address(this), 0, abi.encodeWithSelector(this.markAmount.selector, hash, uint256Var2));
+            address(this), 0, abi.encodeCall(AmountGatedStandard.markAmount, (hash, uint256Var2)));
 
         // out token instruction
         if (addressVar == address(0)) {
-            unpackedInstructions[1] = abi.encode(address(tx.origin), uint256Var2, "");
+            unpackedInstructions[1] = abi.encode(tx.origin, uint256Var2, "");
         } else {
             unpackedInstructions[1] = abi.encode(
                 addressVar,
                 uint256(0),
-                abi.encodeWithSelector(IERC20.transfer.selector, address(tx.origin), uint256Var2));
+                abi.encodeCall(IERC20.transfer, (tx.origin, uint256Var2)));
         }
 
         addressVar = address(bytes20(intent[114 : 134]));
@@ -185,12 +180,12 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         if (addressVar == address(0)) {
             // transfer native token out from this standard address
             unpackedInstructions[uint256Var1] = abi.encode(
-                address(this), uint256(0), abi.encodeWithSelector(ITokenRelayer.transferEth.selector, uint256Var3));
+                address(this), uint256(0), abi.encodeCall(ITokenRelayer.transferEth, (uint256Var3)));
         } else {
             // transfer ERC20 token from tx.origin (aka relayer) through this standard
             unpackedInstructions[uint256Var1] = abi.encode(
-                address(this), uint256(0), abi.encodeWithSelector(
-                    ITokenRelayer.transferERC20From.selector, tx.origin, addressVar, uint256Var3));
+                address(this), uint256(0), abi.encodeCall(
+                    ITokenRelayer.transferERC20From, (tx.origin, addressVar, uint256Var3)));
         }
 
         // nested intents
@@ -209,7 +204,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
                 unpackedInstructions[uint256Var2] = abi.encode(
                     sender,
                     uint256(0),
-                    abi.encodeWithSelector(IACCOUNT_EXECUTE_USER_INTENT_SELECTOR, intent[lengthVar : lengthVar + uint256Var3]));
+                    abi.encodeCall(IAccount.executeUserIntent, (intent[lengthVar : lengthVar + uint256Var3])));
                 lengthVar += uint256Var3;
                 uint256Var2 ++;
             }
@@ -327,7 +322,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
 
     function executeUserIntent(bytes calldata intent) external returns (bytes memory) {
         (address sender,) = PackedIntent.getSenderAndStandard(intent);
-        bytes memory executeCallData = abi.encodeWithSelector(IACCOUNT_EXECUTE_USER_INTENT_SELECTOR, intent);
+        bytes memory executeCallData = abi.encodeCall(IAccount.executeUserIntent, (intent));
 
         (, bytes memory result) = sender.call{value : 0, gas : gasleft()}(executeCallData);
         return result;

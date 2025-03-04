@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
