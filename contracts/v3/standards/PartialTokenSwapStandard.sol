@@ -322,7 +322,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         );
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
-        return (intent, intentHash, solverHash);
+        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
     }
 
     function sampleIntent2(
@@ -361,7 +361,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         );
         solverHash = keccak256(abi.encode(intentHash, relayer));
 
-        return (intent, intentHash, solverHash);
+        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
     }
 
     function sampleCompoundIntent(
