@@ -78,7 +78,7 @@ abstract contract SelfExecutableAccount is IAccount {
 
         for (uint256 i = 0; i < intents.length; i++) {
             (sender,) = PackedIntent.getSenderAndStandard(intents[i]);
-            insData = abi.encodeWithSelector(IAccount.executeUserIntent.selector, intents[i]);
+            insData = abi.encodeCall(IAccount.executeUserIntent, (intents[i]));
             header = bytes.concat(header, bytes2(uint16((insData.length) & 0xFFFF)));
             instructions = bytes.concat(instructions, bytes20(sender), bytes1(0x00), insData);
         }
