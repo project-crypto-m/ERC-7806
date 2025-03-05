@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
-import {StandardRegistry} from "./../../StandardRegistry.sol";
+import {StandardRegistryV2} from "./../../StandardRegistryV2.sol";
 import {IStandard} from "./../interfaces/IStandard.sol";
 import {ITokenRelayer} from "./../interfaces/ITokenRelayer.sol";
 import {SelfExecutableAccount} from "./SelfExecutableAccount.sol";
@@ -12,7 +12,7 @@ contract AccountImplV0 is SelfExecutableAccount {
     string public constant VERSION = "0.0.0";
     string public constant AUTHOR = "hellohanchen";
 
-    StandardRegistry public constant REGISTRY = StandardRegistry(0xa6673924437D5864488CEC4B8fa1654226bb1E8D);
+    StandardRegistryV2 public constant REGISTRY = StandardRegistryV2(0x1EcBE25525F6e6cDe8631e602Df6D55D3967cDF8);
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
 
