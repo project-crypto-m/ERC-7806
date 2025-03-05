@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
@@ -28,10 +28,8 @@ abstract contract SelfExecutableAccount is IAccount {
 
         address dest;
         bytes1 hasValue;
-        uint256 value;
         bool success;
         uint16 dataLength;
-        bytes memory executeData;
 
         for (uint256 i = 0; i < headerLength; i += 2) {
             dataLength = uint16(bytes2(intent[46 + i : 48 + i]));
@@ -80,7 +78,7 @@ abstract contract SelfExecutableAccount is IAccount {
 
         for (uint256 i = 0; i < intents.length; i++) {
             (sender,) = PackedIntent.getSenderAndStandard(intents[i]);
-            insData = abi.encodeWithSelector(IAccount.executeUserIntent.selector, intents[i]);
+            insData = abi.encodeCall(IAccount.executeUserIntent, (intents[i]));
             header = bytes.concat(header, bytes2(uint16((insData.length) & 0xFFFF)));
             instructions = bytes.concat(instructions, bytes20(sender), bytes1(0x00), insData);
         }

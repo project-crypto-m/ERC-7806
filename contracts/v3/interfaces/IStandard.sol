@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 interface IStandard {
     function validateUserIntent(bytes calldata intent) external view returns (bytes4);

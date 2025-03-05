@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {PackedIntent} from "./../../../../contracts/v3/libraries/PackedIntent.sol";
 
 contract PackedIntentTest is Test {
-    function testGetSenderAndStandard() public {
+    function testGetSenderAndStandard() pure public {
         bytes memory intent = bytes.concat(bytes20(address(0x1234)), bytes20(address(0x5678)));
         (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
         assertEq(sender, address(0x1234));
@@ -18,7 +18,7 @@ contract PackedIntentTest is Test {
         PackedIntent.getSenderAndStandard(intent);
     }
 
-    function testGetLengths() public {
+    function testGetLengths() pure public {
         bytes memory intent = bytes.concat(
             bytes20(address(0x1234)),
             bytes20(address(0x5678)),
@@ -42,7 +42,7 @@ contract PackedIntentTest is Test {
         PackedIntent.getLengths(intent);
     }
 
-    function testGetSignatureLength() public {
+    function testGetSignatureLength() pure public {
         bytes memory intent = bytes.concat(
             bytes20(address(0x1234)),
             bytes20(address(0x5678)),
@@ -54,7 +54,7 @@ contract PackedIntentTest is Test {
         assertEq(signatureLength, 40);
     }
 
-    function testGetIntentLength() public {
+    function testGetIntentLength() pure public {
         bytes memory intent = bytes.concat(
             bytes20(address(0x1234)),
             bytes20(address(0x5678)),
@@ -66,7 +66,7 @@ contract PackedIntentTest is Test {
         assertEq(intentLength, 10 + 20 + 30 + 46);
     }
 
-    function testGetIntentLengthFromSection() public {
+    function testGetIntentLengthFromSection() pure public {
         bytes6 lengthSection = bytes6(bytes.concat(bytes2(uint16(10)), bytes2(uint16(20)), bytes2(uint16(30))));
         uint16 result = PackedIntent.getIntentLengthFromSection(lengthSection);
         assertEq(result, 10 + 20 + 30 + 46);

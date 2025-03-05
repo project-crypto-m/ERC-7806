@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 import {ERC20} from "openzeppelin/token/ERC20/ERC20.sol";
 
-contract TestERC20 is ERC20 {
+contract SwapHereUSDC is ERC20 {
     constructor()
         // solhint-disable-next-line no-empty-blocks
-        ERC20("TST20", "TestERC20")
+        ERC20("SwapHereUSDC", "shUSDC")
     {}
 
     function mint(address to, uint256 amount) external {
@@ -19,5 +19,9 @@ contract TestERC20 is ERC20 {
     function approveFor(address owner, address spender, uint256 amount) public returns (bool) {
         _approve(owner, spender, amount);
         return true;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return 6;
     }
 }

@@ -2,7 +2,7 @@
 src = "contracts"
 out = "out"
 libs = ["lib"]
-solc = '0.8.24'
+solc = '0.8.28'
 evm_version = 'cancun'
 optimizer = true
 optimizer-runs = 1_000_000_000

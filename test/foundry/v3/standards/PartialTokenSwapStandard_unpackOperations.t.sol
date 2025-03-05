@@ -33,11 +33,19 @@ contract ICS4Test is Test {
     function test_unpackOperations_success() public {
         erc20.mint(account, 1);
 
-        // no nested intent
-        bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(account)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = false;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(account);
+        address tokenAddress = address(erc20);
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        // no nested intent
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(1)), bytes20(tokenAddress), bytes16(uint128(0)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(1), tokenAddress, uint128(0))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
 
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
@@ -68,10 +76,19 @@ contract ICS4Test is Test {
     function test_unpackOperations_success_nativeAndNested() public {
         // native tokens with nested intent
         vm.deal(address(account), 1 ether);
-        bytes memory content = bytes.concat(bytes1(0x01), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(account)), bytes20(address(0)), bytes16(uint128(1)), bytes20(address(0)), bytes16(uint128(1)));
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        bool isFullOrder = true;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(account);
+        address tokenAddress = address(0);
+
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(1)), bytes20(tokenAddress), bytes16(uint128(1)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(1), tokenAddress, uint128(1))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory bytesVar = abi.encodePacked(r, s, v);
 
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, bytesVar);
@@ -114,12 +131,20 @@ contract ICS4Test is Test {
     }
 
     function test_unpackOperations_failure_signatures() public {
-        bytes memory content = bytes.concat(bytes1(0x01), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(0)), bytes20(address(erc20)), bytes16(uint128(0)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = true;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(0);
+        address tokenAddress = address(erc20);
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(0)), bytes20(tokenAddress), bytes16(uint128(0)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(0), tokenAddress, uint128(0))
+        );
 
         // Solver is not assigned
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, signature);
         vm.expectRevert("Solver is not assigned");
@@ -129,10 +154,18 @@ contract ICS4Test is Test {
     function test_unpackOperations_failure_afterSig() public {
         erc20.mint(account, 1);
 
-        bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(account)), bytes20(address(erc20)), bytes16(uint128(0)), bytes20(address(erc20)), bytes16(uint128(0)));
+        bool isFullOrder = false;
+        uint24 salt = 0;
+        uint64 expiration = uint64(block.timestamp + 1);
+        address solverAddress = address(account);
+        address tokenAddress = address(erc20);
 
-        bytes32 intentHash = keccak256(abi.encode(content, address(standard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+        bytes memory content = bytes.concat(bytes1(uint8(isFullOrder ? 1 : 0)), bytes3(salt), bytes8(expiration), bytes20(solverAddress), bytes20(tokenAddress), bytes16(uint128(0)), bytes20(tokenAddress), bytes16(uint128(0)));
+
+        bytes32 intentHash = keccak256(
+            abi.encode(standard.SIGNED_DATA_TYPEHASH(), isFullOrder, salt, expiration, solverAddress, tokenAddress, uint128(0), tokenAddress, uint128(0))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(accountKey, MessageHashUtils.toTypedDataHash(standard.DOMAIN_SEPARATOR(), intentHash));
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // order limit exceed
