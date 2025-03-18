@@ -25,6 +25,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     event Transfer(address indexed from, address indexed to, uint256 id, uint256 amount);
     event Burn(address indexed burner, address indexed to, uint256 id, uint256 amount);
 
+    mapping(uint256 id => uint256 supply) private _supplies;
     mapping(uint256 id => mapping(address account => uint256)) private _balances;
     mapping(uint256 id => mapping(address account => uint256)) private _lockedBalances;
     mapping(uint256 id => mapping(address account => mapping(address locker => uint256 amount))) private _lockedBalancesByLocker;
@@ -35,6 +36,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     bytes32 public immutable DOMAIN_SEPARATOR;
     bytes32 public immutable LOCK_PERMIT_TYPEHASH;
     bytes32 public immutable TRANSFER_PERMIT_TYPEHASH;
+    uint256 public constant ETH_ID = 0;
 
     modifier sufficientUnlockedBalance(address account, uint256 id, uint256 amount) {
         require(_unlockedBalanceOf(account, id) >= amount, "MarginTokenWrapper: insufficient unlocked balance");
@@ -82,6 +84,14 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     // Mint
+    function mintFromETH() public payable {
+        _mint(msg.sender, msg.sender, ETH_ID, msg.value);
+    }
+
+    function mintFromETHTo(address account) public payable {
+        _mint(msg.sender, account, ETH_ID, msg.value);
+    }
+
     function mintFromERC20(address token, uint256 amount) public {
         bool success = IERC20(token).transferFrom(msg.sender, address(this), amount);
         require(success, "Mint: ERC20 transfer failed");
@@ -120,6 +130,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
 
     function _mint(address minter, address account, uint256 id, uint256 amount) internal {
         _balances[id][account] += amount;
+        _supplies[id] += amount;
         emit Mint(minter, account, id, amount);
     }
 
@@ -269,6 +280,22 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     // Burn
+    function burnETH(uint256 amount) public payable sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
+        _burnETH(msg.sender, payable(msg.sender), amount);
+    }
+
+    function burnETHTo(address payable to, uint256 amount) public payable sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
+        _burnETH(msg.sender, to, amount);
+    }
+
+    function _burnETH(address burner, address payable to, uint256 amount) internal {
+        _burn(ETH_ID, amount);
+        _balances[ETH_ID][burner] -= amount;
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "Burn: ETH transfer failed");
+        emit Burn(burner, to, ETH_ID, amount);
+    }
+
     function burnERC20(uint256 id, uint256 amount) public sufficientUnlockedBalance(msg.sender, id, amount) {
         _burnERC20(msg.sender, msg.sender, id, amount);
     }
@@ -278,6 +305,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     function _burnERC20(address burner, address to, uint256 id, uint256 amount) internal {
+        _burn(id, amount);
         _balances[id][burner] -= amount;
         bool success = IERC20(idToAddress(id)).transfer(to, amount);
         require(success, "Burn: ERC20 transfer failed");
@@ -293,6 +321,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     function _burnERC721(address burner, address to, uint256 id) internal {
+        _burn(id, 1);
         _balances[id][burner] -= 1;
         (address token, uint96 tokenId) = idToAddressAndId(id);
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
@@ -308,10 +337,15 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     function _burnERC1155(address burner, address to, uint256 id, uint256 amount) internal {
+        _burn(id, amount);
         _balances[id][burner] -= amount;
         (address token, uint96 tokenId) = idToAddressAndId(id);
         IERC1155(token).safeTransferFrom(address(this), to, tokenId, amount, "");
         emit Burn(burner, to, id, amount);
+    }
+
+    function _burn(uint256 id, uint256 amount) internal {
+        _supplies[id] -= amount;
     }
 
     // Balance
@@ -346,7 +380,7 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
         }
         return balances;
     }
-    
+
     function _unlockedBalanceOf(address account, uint256 id) internal view returns (uint256) {
         return _balanceOf(account, id) - _lockedBalanceOf(account, id);
     }
@@ -395,5 +429,22 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
 
     function allowanceOf(address account, uint256 id, address spender) public view returns (uint256) {
         return _allowanceOf(account, id, spender);
+    }
+
+    // Supply
+    function totalSupply(uint256 id) public view returns (uint256) {
+        return _supplies[id];
+    }
+
+    function totalSupplyERC20(address token) public view returns (uint256) {
+        return _supplies[addressToId(token)];
+    }
+
+    function totalSupplyERC721(address token, uint96 id) public view returns (uint256) {
+        return _supplies[addressAndIdToId(token, id)];
+    }
+
+    function totalSupplyERC1155(address token, uint96 id) public view returns (uint256) {
+        return _supplies[addressAndIdToId(token, id)];
     }
 }
