@@ -280,11 +280,11 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     // Burn
-    function burnETH(uint256 amount) public payable sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
+    function burnETH(uint256 amount) public sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
         _burnETH(msg.sender, payable(msg.sender), amount);
     }
 
-    function burnETHTo(address payable to, uint256 amount) public payable sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
+    function burnETHTo(address payable to, uint256 amount) public sufficientUnlockedBalance(msg.sender, ETH_ID, amount) {
         _burnETH(msg.sender, to, amount);
     }
 
@@ -349,6 +349,10 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
     }
 
     // Balance
+    function balanceOf(uint256 id) public view returns (uint256) {
+        return _balanceOf(msg.sender, id);
+    }
+
     function balanceOf(address account, uint256 id) public view returns (uint256) {
         return _balanceOf(account, id);
     }
@@ -369,6 +373,10 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
         return _lockedBalances[id][account];
     }
 
+    function lockedBalanceOf(uint256 id) public view returns (uint256) {
+        return _lockedBalanceOf(msg.sender, id);
+    }
+
     function lockedBalanceOf(address account, uint256 id) public view returns (uint256) {
         return _lockedBalanceOf(account, id);
     }
@@ -383,6 +391,10 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
 
     function _unlockedBalanceOf(address account, uint256 id) internal view returns (uint256) {
         return _balanceOf(account, id) - _lockedBalanceOf(account, id);
+    }
+
+    function unlockedBalanceOf(uint256 id) public view returns (uint256) {
+        return _unlockedBalanceOf(msg.sender, id);
     }
 
     function unlockedBalanceOf(address account, uint256 id) public view returns (uint256) {
@@ -401,6 +413,10 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
         return _lockedBalancesByLocker[id][account][locker];
     }
 
+    function lockedBalanceByLocker(uint256 id, address locker) public view returns (uint256) {
+        return _lockedBalanceByLocker(msg.sender, id, locker);
+    }
+
     function lockedBalanceByLocker(address account, uint256 id, address locker) public view returns (uint256) {
         return _lockedBalanceByLocker(account, id, locker);
     }
@@ -410,12 +426,20 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
         return _approvedLockLimitsByLocker[id][account][locker];
     }
 
+    function lockLimitOf(uint256 id, address locker) public view returns (uint256) {
+        return _lockLimitOf(msg.sender, id, locker);
+    }
+
     function lockLimitOf(address account, uint256 id, address locker) public view returns (uint256) {
         return _lockLimitOf(account, id, locker);
     }
 
     function _lockExpirationOf(address account, uint256 id, address locker) internal view returns (uint256) {
         return _approvedLockExpirationsByLocker[id][account][locker];
+    }
+
+    function lockExpirationOf(uint256 id, address locker) public view returns (uint256) {
+        return _lockExpirationOf(msg.sender, id, locker);
     }
 
     function lockExpirationOf(address account, uint256 id, address locker) public view returns (uint256) {
@@ -427,24 +451,32 @@ contract MarginTokenWrapper is ERC165, IERC1155 {
         return _approvedBalancesBySpender[id][account][spender];
     }
 
+    function allowanceOf(uint256 id, address spender) public view returns (uint256) {
+        return _allowanceOf(msg.sender, id, spender);
+    }
+
     function allowanceOf(address account, uint256 id, address spender) public view returns (uint256) {
         return _allowanceOf(account, id, spender);
     }
 
     // Supply
-    function totalSupply(uint256 id) public view returns (uint256) {
+    function totalSupplyOf(uint256 id) public view returns (uint256) {
         return _supplies[id];
     }
 
-    function totalSupplyERC20(address token) public view returns (uint256) {
+    function totalSupplyOfETH() public view returns (uint256) {
+        return _supplies[ETH_ID];
+    }
+
+    function totalSupplyOfERC20(address token) public view returns (uint256) {
         return _supplies[addressToId(token)];
     }
 
-    function totalSupplyERC721(address token, uint96 id) public view returns (uint256) {
+    function totalSupplyOfERC721(address token, uint96 id) public view returns (uint256) {
         return _supplies[addressAndIdToId(token, id)];
     }
 
-    function totalSupplyERC1155(address token, uint96 id) public view returns (uint256) {
+    function totalSupplyOfERC1155(address token, uint96 id) public view returns (uint256) {
         return _supplies[addressAndIdToId(token, id)];
     }
 }
