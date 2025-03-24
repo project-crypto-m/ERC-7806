@@ -21,9 +21,9 @@ contract StandardRegistryV2 {
     bytes32 public immutable SIGNED_DATA_TYPEHASH;
 
     /// @notice The mapping of nonces
-    mapping(bytes32 nonce => bool used) _nonces;
+    mapping(bytes32 nonce => bool used) private _nonces;
     /// @notice The mapping of registrations
-    mapping(bytes32 standard => bool registered) _registrations;
+    mapping(bytes32 standard => bool registered) private _registrations;
 
     /// @notice The constructor of this contract
     constructor() {
