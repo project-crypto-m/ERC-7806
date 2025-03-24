@@ -11,9 +11,9 @@ contract StandardRegistryV2 {
     using ECDSA for bytes32;
 
     /// @notice The event emitted when a standard is registered
-    event StandardRegistered(address, address);
+    event StandardRegistered(address indexed signer, address indexed standard);
     /// @notice The event emitted when a standard is unregistered
-    event StandardUnregistered(address, address);
+    event StandardUnregistered(address indexed signer, address indexed standard);
 
     /// @notice The domain separator of this contract
     bytes32 public immutable DOMAIN_SEPARATOR;

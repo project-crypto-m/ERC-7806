@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IAccount} from "./../interfaces/IAccount.sol";
-
 /// @title PackedIntent
 /// @notice This is a library that packs metadata of intent (sender, standard, lengths) into bytes
 /// @dev the packed intent data schema is defined as follows:

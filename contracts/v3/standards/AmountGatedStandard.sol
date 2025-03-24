@@ -7,7 +7,7 @@ import {IStandard} from "./../interfaces/IStandard.sol";
 /// @notice This is an abstract contract that implements the IStandard interface and provides a mechanism to track and validate amounts associated with specific hashes.
 abstract contract AmountGatedStandard is IStandard {
     /// @notice AmountUsed event is emitted when an amount is used for a specific hash
-    event AmountUsed(address sender, uint256 hash, uint256 amount);
+    event AmountUsed(address indexed sender, uint256 indexed hash, uint256 amount);
 
     /// @notice _hashes is a mapping that stores the amount used for a specific hash
     mapping(bytes32 hash => uint256 amount) internal _hashes;

@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IStandard} from "./../interfaces/IStandard.sol";
 import {ITokenRelayer} from "./../interfaces/ITokenRelayer.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
 import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
@@ -200,7 +199,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         // max in amount
         uint256 uint256Var3 = uint256(uint128(bytes16(intent[134 : 150])));
         // in token amount of this order
-        uint256Var3 = isFullOrder ? uint256Var3 : uint256Var3 * uint256Var2 / uint256Var1;
+        uint256Var3 = isFullOrder ? uint256Var3 : (uint256Var3 * uint256Var2) / uint256Var1;
         // can't take in 0 amount
         uint256Var3 = uint256Var3 > 0 ? uint256Var3 : 1;
         // max operation index
@@ -238,7 +237,8 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
             }
         }
 
-        return (ERC7806Constants.VALIDATION_APPROVED, unpackedInstructions);
+        code = ERC7806Constants.VALIDATION_APPROVED;
+        return (code, unpackedInstructions);
     }
 
     /// @notice The function to validate the signatures of this standard
