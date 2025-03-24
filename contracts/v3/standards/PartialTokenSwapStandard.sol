@@ -241,6 +241,14 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         return (ERC7806Constants.VALIDATION_APPROVED, unpackedInstructions);
     }
 
+    /// @notice The function to validate the signatures of this standard
+    /// @dev The function is used to validate the signatures of this standard
+    /// @param sender The sender of the intent
+    /// @param solver The solver of the intent
+    /// @param intent The intent to validate
+    /// @param indexVar The index of the beginning of the first signature
+    /// @return numUsedSig the number of valid signatures
+    /// @return intentHash the hash of the intent
     function _validateSignatures(
         address sender, address solver, bytes calldata intent, uint256 indexVar
     ) internal view returns (uint8, uint256) {
@@ -292,102 +300,10 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         return (2, uint256(intentHash));
     }
 
-    // -------------
-    // The following methods will be removed after testing
-    // -------------
-    function sampleIntent(
-        address sender, address solver, address relayer,
-        address outTokenAddress, uint128 maxAmount, uint128 orderAmount,
-        address inTokenAddress, uint128 maxInAmount
-    ) external view returns (
-        bytes memory intent, bytes32 intentHash, bytes32 solverHash
-    ) {
-        uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
-        bool isFullOrder = orderAmount == maxAmount;
-        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
-        bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
-            abi.encodePacked(outTokenAddress, maxAmount),
-            abi.encodePacked(inTokenAddress, maxInAmount)
-        );
-        uint16 instructionLength = isFullOrder ? 72 : 88;
-
-        intent = isFullOrder ?
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-
-        intentHash = keccak256(
-            abi.encode(
-                SIGNED_DATA_TYPEHASH,
-                isFullOrder, // isFullOrder
-                uint24(0), // salt
-                expiration, // expiration
-                solver,
-                outTokenAddress, // outToken
-                maxAmount, // outAmount
-                inTokenAddress, // inToken
-                maxInAmount  // inAmount
-            )
-        );
-        solverHash = keccak256(abi.encode(intentHash, relayer));
-
-        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
-    }
-
-    function sampleIntent2(
-        address sender, address solver, address relayer,
-        address outTokenAddress, uint128 maxAmount, uint128 orderAmount,
-        address inTokenAddress, uint128 maxInAmount
-    ) external view returns (
-        bytes memory intent, bytes32 intentHash, bytes32 solverHash
-    ) {
-        uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
-        bool isFullOrder = orderAmount == maxAmount;
-        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
-        bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
-            abi.encodePacked(outTokenAddress, maxAmount),
-            abi.encodePacked(inTokenAddress, maxInAmount)
-        );
-        uint16 instructionLength = isFullOrder ? 72 : 88;
-
-        intent = isFullOrder ?
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-
-        intentHash = keccak256(
-            abi.encode(
-                SIGNED_DATA_TYPEHASH,
-                isFullOrder, // isFullOrder
-                uint24(0), // salt
-                expiration, // expiration
-                solver,
-                outTokenAddress, // outToken
-                maxAmount, // outAmount
-                inTokenAddress, // inToken
-                maxInAmount  // inAmount
-            )
-        );
-        solverHash = keccak256(abi.encode(intentHash, relayer));
-
-        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
-    }
-
-    function sampleCompoundIntent(
-        bytes calldata origin,
-        bytes[] calldata inners
-    ) external pure returns (bytes memory) {
-        bytes memory result = origin;
-        uint8 size = uint8(inners.length);
-        result = bytes.concat(result, bytes1(size));
-
-        for (uint8 i = 0; i < size; i++) {
-            result = bytes.concat(result, inners[i]);
-        }
-
-        return result;
-    }
-
+    /// @notice The function to execute the user intent
+    /// @dev The function is used to execute the user intent
+    /// @param intent The intent to execute
+    /// @return result the result of the execution
     function executeUserIntent(bytes calldata intent) external returns (bytes memory) {
         (address sender,) = PackedIntent.getSenderAndStandard(intent);
         bytes memory executeCallData = abi.encodeCall(IAccount.executeUserIntent, (intent));
