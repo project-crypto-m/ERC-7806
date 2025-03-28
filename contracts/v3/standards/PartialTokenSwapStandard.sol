@@ -1,69 +1,68 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
-import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
-import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
-import {IStandard} from "./../interfaces/IStandard.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ITokenRelayer} from "./../interfaces/ITokenRelayer.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
+import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {AmountGatedStandard} from "./AmountGatedStandard.sol";
 import {BaseTokenRelayer} from "./../BaseTokenRelayer.sol";
 
-/*
-PartialTokenSwapStandard
+/**
+@title PartialTokenSwapStandard
+@notice This is a standard that allows sender to defines an order that swaps 2 tokens (native or ERC20). It is amount and time gated, meaning the intent can only be executed before a timestamp (expiration) or before the amount is fulfilled.
 
-This standard allows sender to defines an order that swaps 2 tokens (native or ERC20). It is amount and time gated,
-meaning the intent can only be executed before a timestamp (expiration) or before the amount is fulfilled.
-
-The first 20 bytes of the `intent` is sender address.
-The next 20 bytes of the `intent` is the standard address, which should be equal to address of this standard.
-The following is the length section, containing 3 uint16 defining header length, instructions length and signature length.
+This standard follows the PackedIntent library's intent schame with its specific intent header, instructions and signature format:
 
 The header is fixed to be 32 bytes long.
-The first 1 byte (uint8) is either "0x0" or "0x1", representing partial order and full order.
-The next 3 bytes (uint24) are a random salt to allow users placing the same order multiple times.
-The following 8 bytes (uint64) are the timestamp in epoch seconds.
-The last 20 bytes (address) are the solver of this intent.
-- if the solver is the sender, then any body can relay the intent.
-- if the solver is not the sender, then the sender needs to provide a signature as well and only a specific relayer can
-execute this intent on-chain.
+- The first 1 byte (uint8) is either "0x0" or "0x1", representing partial order and full order.
+- The next 3 bytes (uint24) are a random salt to allow users placing the same order multiple times.
+- The following 8 bytes (uint64) are the timestamp in epoch seconds.
+- The last 20 bytes (address) are the solver of this intent.
+  - When the solver is address(0), the intent is for validation only and can't be executed.
+  - When the solver is the sender, the intent is self-solved and only 1 signature is needed.
+  - When the solver is not the sender, the intent is relayed and 2 signatures are needed.
 
 The instructions contains 3 main part.
-The first 36 bytes are packed encoded (address, uint128) pair representing the token and maximum amount the sender is
-willing to send out.
-The next 36 bytes are packed encoded (address, uint128) pair representing the token and amount the sender will get back
-when the out amount is at max.
-The following 16 bytes (uint128) are the out token amount of this execution. Only partial order needs this and this field
-is filled in by the solver.
+- The first 36 bytes are packed encoded (address, uint128) pair representing the token and maximum amount the sender is willing to send out.
+- The next 36 bytes are packed encoded (address, uint128) pair representing the token and amount the sender will get back when the out amount is at max.
+- The following 16 bytes (uint128) are the out token amount of this execution. Only partial order needs this and this field is filled in by the solver.
 
 The signature field is 65 bytes long if the intent solver is sender, 130 bytes long if the intent solver is not the sender.
 
-This intent allows nested intents to follow it, the first byte (uint8) after the intent body defines the number of
-nested intents. Then the first 2-bytes of each nested intent defines the total length of the corresponding intent.
-
-When executing, the operations will be carried out in the following order
+When executing, the operations will be carried out in the following order:
 - mark amount
 - transfer out token with amount to the relayer
 - execute nested intents (if any)
 - transfer in token back from the relayer
+
+This standard allows nested intents to follow it, the first byte (uint8) after the intent body defines the number of nested intents. Then the first 2-bytes of each nested intent defines the total length of the corresponding intent.
+
+@dev The unpackOperations method should only be called if the intent is validated by validateUserIntent.
+@dev To improve user experience and enhance security, this standard is using EIP-712 standard for intent signing and verification.
 */
 contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     using ECDSA for bytes32;
 
-    string public constant ICS_NUMBER = "ICS6";
+    /// @notice The description of this standard
     string public constant DESCRIPTION = "Timed Hashed Pre-Delegated Partial ERC20 Token Swap Standard";
+    /// @notice The version of this standard
     string public constant VERSION = "0.1.0";
+    /// @notice The github account of the author of this standard
     string public constant AUTHOR = "hellohanchen";
 
-    bytes4 public constant VALIDATION_DENIED = 0x00000000;
-    bytes4 public constant VALIDATION_APPROVED = 0x00000001;
+    /// @notice This is a special validation code when the solver is address(0)
     bytes4 public constant VALIDATION_APPROVED_SENDER_ONLY = 0x00000002;
-
+    /// @notice The domain separator of this standard
     bytes32 public immutable DOMAIN_SEPARATOR;
+    /// @notice The type hash of the signed data of this standard
     bytes32 public immutable SIGNED_DATA_TYPEHASH;
 
+    /// @notice The constructor of this standard
+    /// @dev The domain separator and type hash are generated for EIP-712 standard
     constructor() {
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -80,6 +79,10 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         );
     }
 
+    /// @notice The function to validate the user intent
+    /// @dev The function is used to validate the user intent
+    /// @param intent The intent to validate
+    /// @return result code of the validation
     function validateUserIntent(bytes calldata intent) external view returns (bytes4) {
         (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
         require(addressVar == address(this), "Not this standard");
@@ -140,9 +143,14 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         require(this.getAmount(sender, hash) + uintVar2 <= uintVar1, "Order limit exceeded");
 
         // no need to validate nested intent as that should be validated separately
-        return VALIDATION_APPROVED;
+        return ERC7806Constants.VALIDATION_APPROVED;
     }
 
+    /// @notice The function to unpack the operations of this standard
+    /// @dev The function is used to unpack the operations of this standard
+    /// @param intent The intent to unpack
+    /// @return code of the validation
+    /// @return unpackedInstructions the unpacked instructions
     function unpackOperations(bytes calldata intent) external view returns (bytes4 code, bytes[] memory unpackedInstructions) {
         (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
         require(addressVar == address(this), "Not this standard");
@@ -191,7 +199,7 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         // max in amount
         uint256 uint256Var3 = uint256(uint128(bytes16(intent[134 : 150])));
         // in token amount of this order
-        uint256Var3 = isFullOrder ? uint256Var3 : uint256Var3 * uint256Var2 / uint256Var1;
+        uint256Var3 = isFullOrder ? uint256Var3 : (uint256Var3 * uint256Var2) / uint256Var1;
         // can't take in 0 amount
         uint256Var3 = uint256Var3 > 0 ? uint256Var3 : 1;
         // max operation index
@@ -229,9 +237,18 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
             }
         }
 
-        return (VALIDATION_APPROVED, unpackedInstructions);
+        code = ERC7806Constants.VALIDATION_APPROVED;
+        return (code, unpackedInstructions);
     }
 
+    /// @notice The function to validate the signatures of this standard
+    /// @dev The function is used to validate the signatures of this standard
+    /// @param sender The sender of the intent
+    /// @param solver The solver of the intent
+    /// @param intent The intent to validate
+    /// @param indexVar The index of the beginning of the first signature
+    /// @return numUsedSig the number of valid signatures
+    /// @return intentHash the hash of the intent
     function _validateSignatures(
         address sender, address solver, bytes calldata intent, uint256 indexVar
     ) internal view returns (uint8, uint256) {
@@ -283,102 +300,10 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         return (2, uint256(intentHash));
     }
 
-    // -------------
-    // The following methods will be removed after testing
-    // -------------
-    function sampleIntent(
-        address sender, address solver, address relayer,
-        address outTokenAddress, uint128 maxAmount, uint128 orderAmount,
-        address inTokenAddress, uint128 maxInAmount
-    ) external view returns (
-        bytes memory intent, bytes32 intentHash, bytes32 solverHash
-    ) {
-        uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
-        bool isFullOrder = orderAmount == maxAmount;
-        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
-        bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
-            abi.encodePacked(outTokenAddress, maxAmount),
-            abi.encodePacked(inTokenAddress, maxInAmount)
-        );
-        uint16 instructionLength = isFullOrder ? 72 : 88;
-
-        intent = isFullOrder ?
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-
-        intentHash = keccak256(
-            abi.encode(
-                SIGNED_DATA_TYPEHASH,
-                isFullOrder, // isFullOrder
-                uint24(0), // salt
-                expiration, // expiration
-                solver,
-                outTokenAddress, // outToken
-                maxAmount, // outAmount
-                inTokenAddress, // inToken
-                maxInAmount  // inAmount
-            )
-        );
-        solverHash = keccak256(abi.encode(intentHash, relayer));
-
-        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
-    }
-
-    function sampleIntent2(
-        address sender, address solver, address relayer,
-        address outTokenAddress, uint128 maxAmount, uint128 orderAmount,
-        address inTokenAddress, uint128 maxInAmount
-    ) external view returns (
-        bytes memory intent, bytes32 intentHash, bytes32 solverHash
-    ) {
-        uint16 signatureLength = solver == address(0) || solver == relayer ? 65 : 130;
-        bool isFullOrder = orderAmount == maxAmount;
-        uint64 expiration = uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF);
-        bytes memory toSign = bytes.concat(
-            bytes32(abi.encodePacked(isFullOrder, uint24(0), expiration, solver)),
-            abi.encodePacked(outTokenAddress, maxAmount),
-            abi.encodePacked(inTokenAddress, maxInAmount)
-        );
-        uint16 instructionLength = isFullOrder ? 72 : 88;
-
-        intent = isFullOrder ?
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign) :
-        bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(32)), bytes2(instructionLength), bytes2(signatureLength), toSign, bytes16(orderAmount));
-
-        intentHash = keccak256(
-            abi.encode(
-                SIGNED_DATA_TYPEHASH,
-                isFullOrder, // isFullOrder
-                uint24(0), // salt
-                expiration, // expiration
-                solver,
-                outTokenAddress, // outToken
-                maxAmount, // outAmount
-                inTokenAddress, // inToken
-                maxInAmount  // inAmount
-            )
-        );
-        solverHash = keccak256(abi.encode(intentHash, relayer));
-
-        return (intent, MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash), solverHash);
-    }
-
-    function sampleCompoundIntent(
-        bytes calldata origin,
-        bytes[] calldata inners
-    ) external pure returns (bytes memory) {
-        bytes memory result = origin;
-        uint8 size = uint8(inners.length);
-        result = bytes.concat(result, bytes1(size));
-
-        for (uint8 i = 0; i < size; i++) {
-            result = bytes.concat(result, inners[i]);
-        }
-
-        return result;
-    }
-
+    /// @notice The function to execute the user intent
+    /// @dev The function is used to execute the user intent
+    /// @param intent The intent to execute
+    /// @return result the result of the execution
     function executeUserIntent(bytes calldata intent) external returns (bytes memory) {
         (address sender,) = PackedIntent.getSenderAndStandard(intent);
         bytes memory executeCallData = abi.encodeCall(IAccount.executeUserIntent, (intent));
