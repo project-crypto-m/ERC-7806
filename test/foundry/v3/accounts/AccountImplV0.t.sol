@@ -12,19 +12,10 @@ import {PartialTokenSwapStandard} from  "./../../../../contracts/v3/standards/Pa
 import {StandardRegistryV2} from "./../../../../contracts/StandardRegistryV2.sol";
 import {TestERC20} from "./../../../../contracts/test/TestERC20.sol";
 
-
-contract MockAccountImplV0 is AccountImplV0 {
-    function tryExecuteOtherIntent(bytes calldata intent, address standard) external returns (bytes memory) {
-        return executeOtherIntent(intent, standard);
-    }
-}
-
-
 contract AccountImplV0Test is Test {
     TestERC20 public erc20;
     StandardRegistryV2 public registry;
     PartialTokenSwapStandard public partialTokenSwapStandard;
-    MockAccountImplV0 public mockAccountImplV0;
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
     bytes4 public constant VALIDATION_DENIED = 0x00000000;
     address public user;
@@ -36,25 +27,25 @@ contract AccountImplV0Test is Test {
 
         // enforce StandardRegistry at 0xa6673924437D5864488CEC4B8fa1654226bb1E8D
         StandardRegistryV2 mockRegistry = new StandardRegistryV2();
-        address registryAddress = 0xa6673924437D5864488CEC4B8fa1654226bb1E8D;
+        address registryAddress = 0x1EcBE25525F6e6cDe8631e602Df6D55D3967cDF8;
         vm.etch(registryAddress, address(mockRegistry).code);
-        registry = StandardRegistryV2(0xa6673924437D5864488CEC4B8fa1654226bb1E8D);
+        registry = StandardRegistryV2(registryAddress);
 
 
         // register standard using registry.update
         partialTokenSwapStandard = new PartialTokenSwapStandard();
         (user, userKey) = makeAddrAndKey("account");
-        mockAccountImplV0 = new MockAccountImplV0();
+        AccountImplV0 mockAccountImplV0 = new AccountImplV0();
+        vm.etch(user, address(mockAccountImplV0).code);
 
         bool registering = true;
         uint256 nonce = 123;
-        vm.prank(address(mockAccountImplV0));
+        vm.prank(user);
         registry.update(registering, address(partialTokenSwapStandard), nonce);
-        require(registry.isRegistered(address(mockAccountImplV0), address(partialTokenSwapStandard)), "not registered");
+        require(registry.isRegistered(user, address(partialTokenSwapStandard)), "not registered");
     }
 
     function testExecuteOtherIntent() public {
-        erc20.mint(address(mockAccountImplV0), 1);
         erc20.mint(user, 1);
         erc20.mint(tx.origin, 1);
         vm.startPrank(tx.origin);
@@ -77,7 +68,13 @@ contract AccountImplV0Test is Test {
         bytes4 code = partialTokenSwapStandard.validateUserIntent(intent);
         assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
 
-        bytes memory result = mockAccountImplV0.tryExecuteOtherIntent(intent, address(partialTokenSwapStandard));
+        bytes[] memory operations;
+        (code, operations) = partialTokenSwapStandard.unpackOperations(intent);
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
+        assertEq(3, operations.length);
+
+        require(registry.isRegistered(user, address(partialTokenSwapStandard)), "not registered");
+        bytes memory result = AccountImplV0(payable(user)).executeUserIntent(intent);
         assertEq(result, new bytes(0));
     }
 }
