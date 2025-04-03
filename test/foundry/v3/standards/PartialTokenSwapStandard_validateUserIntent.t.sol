@@ -6,6 +6,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
+import {ERC7806Constants} from "./../../../../contracts/v3/libraries/ERC7806Constants.sol";
 import {PartialTokenSwapStandard} from "./../../../../contracts/v3/standards/PartialTokenSwapStandard.sol";
 import {TestERC20} from "./../../../../contracts/test/TestERC20.sol";
 import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
@@ -63,7 +64,7 @@ contract ICS4Test is Test {
         intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
 
         code = standard.validateUserIntent(intent);
-        assertEq(code, standard.VALIDATION_APPROVED());
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
 
         // with solver
         solverAddress = address(solver);
@@ -83,7 +84,7 @@ contract ICS4Test is Test {
         intent = bytes.concat(intent, signature);
 
         code = standard.validateUserIntent(intent);
-        assertEq(code, standard.VALIDATION_APPROVED());
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
     }
 
     function test_validateIntent_failure_validations() public {

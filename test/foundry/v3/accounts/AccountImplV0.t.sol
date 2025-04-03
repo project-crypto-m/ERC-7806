@@ -7,8 +7,9 @@ import {AccountImplV0} from "./../../../../contracts/v3/accounts/AccountImplV0.s
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {IStandard} from "./../../../../contracts/v3/interfaces/IStandard.sol";
 import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
+import {ERC7806Constants} from "./../../../../contracts/v3/libraries/ERC7806Constants.sol";
 import {PartialTokenSwapStandard} from  "./../../../../contracts/v3/standards/PartialTokenSwapStandard.sol";
-import {StandardRegistry} from "./../../../../contracts/StandardRegistry.sol";
+import {StandardRegistryV2} from "./../../../../contracts/StandardRegistryV2.sol";
 import {TestERC20} from "./../../../../contracts/test/TestERC20.sol";
 
 
@@ -21,7 +22,7 @@ contract MockAccountImplV0 is AccountImplV0 {
 
 contract AccountImplV0Test is Test {
     TestERC20 public erc20;
-    StandardRegistry public registry;
+    StandardRegistryV2 public registry;
     PartialTokenSwapStandard public partialTokenSwapStandard;
     MockAccountImplV0 public mockAccountImplV0;
     bytes4 public constant VALIDATION_APPROVED = 0x00000001;
@@ -34,10 +35,10 @@ contract AccountImplV0Test is Test {
         erc20 = new TestERC20();
 
         // enforce StandardRegistry at 0xa6673924437D5864488CEC4B8fa1654226bb1E8D
-        StandardRegistry mockRegistry = new StandardRegistry();
+        StandardRegistryV2 mockRegistry = new StandardRegistryV2();
         address registryAddress = 0xa6673924437D5864488CEC4B8fa1654226bb1E8D;
         vm.etch(registryAddress, address(mockRegistry).code);
-        registry = StandardRegistry(0xa6673924437D5864488CEC4B8fa1654226bb1E8D);
+        registry = StandardRegistryV2(0xa6673924437D5864488CEC4B8fa1654226bb1E8D);
 
 
         // register standard using registry.update
@@ -54,18 +55,28 @@ contract AccountImplV0Test is Test {
 
     function testExecuteOtherIntent() public {
         erc20.mint(address(mockAccountImplV0), 1);
+        erc20.mint(user, 1);
         erc20.mint(tx.origin, 1);
         vm.startPrank(tx.origin);
         erc20.approve(address(partialTokenSwapStandard), 1);
 
         // construct intent to send 1 erc20 from user
         bytes memory content = bytes.concat(bytes1(0x00), bytes3(0x000000), bytes8(uint64(block.timestamp + 1)), bytes20(address(user)), bytes20(address(erc20)), bytes16(uint128(1)), bytes20(address(erc20)), bytes16(uint128(0)));
-        bytes32 intentHash = keccak256(abi.encode(content, address(partialTokenSwapStandard), block.chainid));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
-        bytes memory signature = abi.encodePacked(r, s, v);
-        bytes memory intent = bytes.concat(bytes20(address(user)), bytes20(address(partialTokenSwapStandard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
 
+        bytes32 intentHash = keccak256(
+            abi.encode(partialTokenSwapStandard.SIGNED_DATA_TYPEHASH(), false, uint24(0), uint64(block.timestamp + 1), address(user), address(erc20), uint128(1), address(erc20), uint128(0))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, MessageHashUtils.toTypedDataHash(partialTokenSwapStandard.DOMAIN_SEPARATOR(), intentHash));
+        bytes memory signature = abi.encodePacked(r, s, v);
+//
+//        bytes32 intentHash = keccak256(abi.encode(content, address(partialTokenSwapStandard), block.chainid));
+//        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, MessageHashUtils.toEthSignedMessageHash(intentHash));
+//        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory intent = bytes.concat(bytes20(address(user)), bytes20(address(partialTokenSwapStandard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
         vm.startPrank(user);
+        bytes4 code = partialTokenSwapStandard.validateUserIntent(intent);
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
+
         bytes memory result = mockAccountImplV0.tryExecuteOtherIntent(intent, address(partialTokenSwapStandard));
         assertEq(result, new bytes(0));
     }

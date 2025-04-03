@@ -7,6 +7,7 @@ pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {ERC7806Constants} from "./../../../../contracts/v3/libraries/ERC7806Constants.sol";
 import {PartialTokenSwapStandard} from "./../../../../contracts/v3/standards/PartialTokenSwapStandard.sol";
 import {ITokenRelayer} from "./../../../../contracts/v3/interfaces/ITokenRelayer.sol";
 import {IAccount} from "./../../../../contracts/v3/interfaces/IAccount.sol";
@@ -51,7 +52,7 @@ contract ICS4Test is Test {
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(88)), bytes2(uint16(65)), content, bytes16(uint128(1)), signature);
 
         (bytes4 code, bytes[] memory operations) = standard.unpackOperations(intent);
-        assertEq(code, standard.VALIDATION_APPROVED());
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
         assertEq(3, operations.length);
 
         // mark amount
@@ -94,7 +95,7 @@ contract ICS4Test is Test {
         bytes memory intent = bytes.concat(bytes20(address(account)), bytes20(address(standard)), bytes2(uint16(32)), bytes2(uint16(72)), bytes2(uint16(65)), content, bytesVar);
 
         (bytes4 code, bytes[] memory operations) = standard.unpackOperations(bytes.concat(intent, bytes1(uint8(1)), intent));
-        assertEq(code, standard.VALIDATION_APPROVED());
+        assertEq(code, ERC7806Constants.VALIDATION_APPROVED);
         assertEq(4, operations.length);
 
         // send token out

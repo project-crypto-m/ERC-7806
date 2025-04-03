@@ -84,63 +84,61 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     /// @param intent The intent to validate
     /// @return result code of the validation
     function validateUserIntent(bytes calldata intent) external view returns (bytes4) {
-        (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
-        require(addressVar == address(this), "Not this standard");
-        (uint256 uintVar1, uint256 uintVar2, uint256 signatureLen) = PackedIntent.getLengths(intent);
-        require(uintVar1 == 32, "Invalid header length");
-        require(intent.length >= 78 + uintVar2 + signatureLen, "Not enough intent length");
+        (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
+        require(standard == address(this), "Not this standard");
+        (uint256 headerLength, uint256 instructionsLength, uint256 signatureLength) = PackedIntent.getLengths(intent);
+        require(headerLength == 32, "Invalid header length");
+        require(intent.length >= 78 + instructionsLength + signatureLength, "Not enough intent length");
         // isFullOrder
-        bool booleanVar = bytes1(intent[46 : 47]) == bytes1(0x01);
-        if (booleanVar) {
-            require(uintVar2 == 72, "Invalid full order instruction length");
+        bool isFullOrder = bytes1(intent[46 : 47]) == bytes1(0x01);
+        if (isFullOrder) {
+            require(instructionsLength == 72, "Invalid full order instruction length");
         } else {
-            require(uintVar2 == 88, "Invalid partial order instruction length");
+            require(instructionsLength == 88, "Invalid partial order instruction length");
         }
-        uint256 uintVar3 = 78 + uintVar2;
-        require(signatureLen == 65 || signatureLen == 130, "Invalid signature length");
+        uint256 signatureStart = 78 + instructionsLength;
+        require(signatureLength == 65 || signatureLength == 130, "Invalid signature length");
 
         // fetch header content
         // salt = uint24(bytes3(intent[48:50]));  // we don't need to parse salt
-        uintVar1 = uint256(uint64(bytes8(intent[50 : 58])));
+        uint256 expiration = uint256(uint64(bytes8(intent[50 : 58])));
         // timestamp
-        require(uintVar1 >= block.timestamp, "Intent expired");
+        require(expiration >= block.timestamp, "Intent expired");
 
         // validate out token instruction
         // after header
-        addressVar = address(bytes20(intent[78 : 98]));
+        address outTokenAddress = address(bytes20(intent[78 : 98]));
         // max out token amount
-        uintVar1 = uint256(uint128(bytes16(intent[98 : 114])));
-        // amount for this oder
-        uintVar2 = booleanVar ? uintVar1 : uint256(uint128(bytes16(intent[150 : 166])));
-        if (addressVar != address(0)) {
-            bytes memory data;
-            (booleanVar, data) = addressVar.staticcall(abi.encodeCall(IERC20.balanceOf, (sender)));
-            if (!booleanVar || data.length != 32) {
+        uint256 maxOutTokenAmount = uint256(uint128(bytes16(intent[98 : 114])));
+        // amount of out token for this oder
+        uint256 orderOutTokenAmount = isFullOrder ? maxOutTokenAmount : uint256(uint128(bytes16(intent[150 : 166])));
+        if (outTokenAddress != address(0)) {
+            (bool success, bytes memory data) = outTokenAddress.staticcall(abi.encodeCall(IERC20.balanceOf, (sender)));
+            if (!success || data.length != 32) {
                 revert("Not ERC20 token");
             }
-            require(abi.decode(data, (uint256)) >= uintVar2, "Insufficient token balance");
+            require(abi.decode(data, (uint256)) >= orderOutTokenAmount, "Insufficient token balance");
         } else {
-            require(sender.balance >= uintVar2, "Insufficient eth balance");
+            require(sender.balance >= orderOutTokenAmount, "Insufficient eth balance");
         }
 
         // after outToken ins is the inToken instruction
-        addressVar = address(bytes20(intent[114 : 134]));
-        if (addressVar != address(0)) {
-            bytes memory data;
-            (booleanVar, data) = addressVar.staticcall(abi.encodeCall(IERC20.totalSupply, ()));
-            if (!booleanVar || data.length != 32) {
+        address inTokenAddress = address(bytes20(intent[114 : 134]));
+        if (inTokenAddress != address(0)) {
+            (bool success, bytes memory data) = inTokenAddress.staticcall(abi.encodeCall(IERC20.totalSupply, ()));
+            if (!success || data.length != 32) {
                 revert("Not ERC20 token");
             }
         }
 
-        (uint8 uint8Var, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, uintVar3);
-        if (uint8Var == 0) {
+        (uint8 numValidatedSignatures, uint256 intentHash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, signatureStart);
+        if (numValidatedSignatures == 0) {
             return VALIDATION_APPROVED_SENDER_ONLY;
         }
-        if (uint8Var == 1) {
-            require(signatureLen == 65, "Only 1 signature is needed");
+        if (numValidatedSignatures == 1) {
+            require(signatureLength == 65, "Only 1 signature is needed");
         }
-        require(this.getAmount(sender, hash) + uintVar2 <= uintVar1, "Order limit exceeded");
+        require(this.getAmount(sender, intentHash) + orderOutTokenAmount <= maxOutTokenAmount, "Order limit exceeded");
 
         // no need to validate nested intent as that should be validated separately
         return ERC7806Constants.VALIDATION_APPROVED;
@@ -152,88 +150,88 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     /// @return code of the validation
     /// @return unpackedInstructions the unpacked instructions
     function unpackOperations(bytes calldata intent) external view returns (bytes4 code, bytes[] memory unpackedInstructions) {
-        (address sender, address addressVar) = PackedIntent.getSenderAndStandard(intent);
-        require(addressVar == address(this), "Not this standard");
+        (address sender, address standard) = PackedIntent.getSenderAndStandard(intent);
+        require(standard == address(this), "Not this standard");
         bool isFullOrder = bytes1(intent[46 : 47]) == bytes1(0x01);
         // signature offset
-        uint256 lengthVar = isFullOrder ? 150 : 166;
+        uint256 signatureStartIndex = isFullOrder ? 150 : 166;
 
         // fetch header content
         // salt = uint24(bytes3(intent[48:50]));  // we don't need to parse salt
         // timestamp
         require(uint256(uint64(bytes8(intent[50 : 58]))) >= block.timestamp, "Intent expired");
-        (uint8 uint8Var, uint256 hash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, lengthVar);
+        (uint8 numValidatedSignatures, uint256 intentHash) = _validateSignatures(sender, address(bytes20(intent[58 : 78])), intent, signatureStartIndex);
         // solver != address(0), this numUsedSig should only be 1 or 2
-        require(uint8Var != 0, "Solver is not assigned");
+        require(numValidatedSignatures != 0, "Solver is not assigned");
         // total length of this intent
-        lengthVar = uint8Var == 1 ? lengthVar + 65 : lengthVar + 130;
+        uint256 currentIntentLength = numValidatedSignatures == 1 ? signatureStartIndex + 65 : signatureStartIndex + 130;
         // # of nested intents
-        uint8Var = intent.length == lengthVar ? 0 : uint8(bytes1(intent[lengthVar : lengthVar + 1]));
+        uint8 numNestedIntents = intent.length == currentIntentLength ? 0 : uint8(bytes1(intent[currentIntentLength : currentIntentLength + 1]));
 
         // total instructions = mark amount + transfer out + nestIntents execution (optional) + transfer in
-        unpackedInstructions = new bytes[](3 + uint8Var);
+        unpackedInstructions = new bytes[](3 + numNestedIntents);
 
         // out token instruction, send token to tx.origin (aka. relayer)
-        addressVar = address(bytes20(intent[78 : 98]));
+        address outTokenAddress = address(bytes20(intent[78 : 98]));
         // max amount
-        uint256 uint256Var1 = uint256(uint128(bytes16(intent[98 : 114])));
+        uint256 maxOutTokenAmount = uint256(uint128(bytes16(intent[98 : 114])));
         // out amount of this order
-        uint256 uint256Var2 = isFullOrder ? uint256Var1 : uint256(uint128(bytes16(intent[150 : 166])));
-        require(this.getAmount(sender, hash) + uint256Var2 <= uint256Var1, "Order limit exceeded");
+        uint256 orderOutTokenAmount = isFullOrder ? maxOutTokenAmount : uint256(uint128(bytes16(intent[150 : 166])));
+        require(this.getAmount(sender, intentHash) + orderOutTokenAmount <= maxOutTokenAmount, "Order limit exceeded");
 
         // first instruction is mark amount to prevent re-entry attack
         unpackedInstructions[0] = abi.encode(
-            address(this), 0, abi.encodeCall(AmountGatedStandard.markAmount, (hash, uint256Var2)));
+            address(this), 0, abi.encodeCall(AmountGatedStandard.markAmount, (intentHash, orderOutTokenAmount)));
 
         // out token instruction
-        if (addressVar == address(0)) {
-            unpackedInstructions[1] = abi.encode(tx.origin, uint256Var2, "");
+        if (outTokenAddress == address(0)) {
+            unpackedInstructions[1] = abi.encode(tx.origin, orderOutTokenAmount, "");
         } else {
             unpackedInstructions[1] = abi.encode(
-                addressVar,
+                outTokenAddress,
                 uint256(0),
-                abi.encodeCall(IERC20.transfer, (tx.origin, uint256Var2)));
+                abi.encodeCall(IERC20.transfer, (tx.origin, orderOutTokenAmount)));
         }
 
-        addressVar = address(bytes20(intent[114 : 134]));
+        address inTokenAddress = address(bytes20(intent[114 : 134]));
         // max in amount
-        uint256 uint256Var3 = uint256(uint128(bytes16(intent[134 : 150])));
+        uint256 maxInTokenAmount = uint256(uint128(bytes16(intent[134 : 150])));
         // in token amount of this order
-        uint256Var3 = isFullOrder ? uint256Var3 : (uint256Var3 * uint256Var2) / uint256Var1;
+        uint256 orderInTokenAmount = isFullOrder ? maxInTokenAmount : (maxInTokenAmount * orderOutTokenAmount) / maxOutTokenAmount;
         // can't take in 0 amount
-        uint256Var3 = uint256Var3 > 0 ? uint256Var3 : 1;
+        orderInTokenAmount = orderInTokenAmount > 0 ? orderInTokenAmount : 1;
         // max operation index
-        uint256Var1 = unpackedInstructions.length - 1;
-        if (addressVar == address(0)) {
+        uint256 inTokenInstructionIndex = unpackedInstructions.length - 1;
+        if (inTokenAddress == address(0)) {
             // transfer native token out from this standard address
-            unpackedInstructions[uint256Var1] = abi.encode(
-                address(this), uint256(0), abi.encodeCall(ITokenRelayer.transferEth, (uint256Var3)));
+            unpackedInstructions[inTokenInstructionIndex] = abi.encode(
+                address(this), uint256(0), abi.encodeCall(ITokenRelayer.transferEth, (orderInTokenAmount)));
         } else {
             // transfer ERC20 token from tx.origin (aka relayer) through this standard
-            unpackedInstructions[uint256Var1] = abi.encode(
+            unpackedInstructions[inTokenInstructionIndex] = abi.encode(
                 address(this), uint256(0), abi.encodeCall(
-                    ITokenRelayer.transferERC20From, (tx.origin, addressVar, uint256Var3)));
+                    ITokenRelayer.transferERC20From, (tx.origin, inTokenAddress, orderInTokenAmount)));
         }
 
         // nested intents
-        if (uint8Var > 0) {
-            lengthVar += 1;
+        if (numNestedIntents > 0) {
+            uint256 nestedIntentStartIndex = currentIntentLength + 1;
             // max nested intent execution operation index
-            uint256Var1 -= 1;
+            uint256 lastNestedIntentInstructionIndex = inTokenInstructionIndex - 1;
             // start index of nested intent execution operation
-            uint256Var2 = 2;
+            uint256 nestedIntentInstructionIndex = 2;
             // index of nested intent starts from 2 because 0 is markAmount, 1 is out token instruction
-            while (uint256Var2 <= uint256Var1) {
-                require(lengthVar + 46 <= intent.length, "Invalid nested intent");
-                uint256Var3 = PackedIntent.getIntentLengthFromSection(bytes6(intent[lengthVar + 40 : lengthVar + 46]));
+            while (nestedIntentInstructionIndex <= lastNestedIntentInstructionIndex) {
+                require(nestedIntentStartIndex + 46 <= intent.length, "Invalid nested intent");
+                uint256 nestedIntentLength = PackedIntent.getIntentLengthFromSection(bytes6(intent[nestedIntentStartIndex + 40 : nestedIntentStartIndex + 46]));
                 // nested intent length
-                sender = address(bytes20(intent[lengthVar : lengthVar + 20]));
-                unpackedInstructions[uint256Var2] = abi.encode(
-                    sender,
+                address nestedIntentSender = address(bytes20(intent[nestedIntentStartIndex : nestedIntentStartIndex + 20]));
+                unpackedInstructions[nestedIntentInstructionIndex] = abi.encode(
+                    nestedIntentSender,
                     uint256(0),
-                    abi.encodeCall(IAccount.executeUserIntent, (intent[lengthVar : lengthVar + uint256Var3])));
-                lengthVar += uint256Var3;
-                uint256Var2 ++;
+                    abi.encodeCall(IAccount.executeUserIntent, (intent[nestedIntentStartIndex : nestedIntentStartIndex + nestedIntentLength])));
+                nestedIntentStartIndex += nestedIntentLength;
+                nestedIntentInstructionIndex ++;
             }
         }
 
@@ -246,11 +244,11 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
     /// @param sender The sender of the intent
     /// @param solver The solver of the intent
     /// @param intent The intent to validate
-    /// @param indexVar The index of the beginning of the first signature
+    /// @param signatureStartIndex The index of the beginning of the first signature
     /// @return numUsedSig the number of valid signatures
     /// @return intentHash the hash of the intent
     function _validateSignatures(
-        address sender, address solver, bytes calldata intent, uint256 indexVar
+        address sender, address solver, bytes calldata intent, uint256 signatureStartIndex
     ) internal view returns (uint8, uint256) {
         bytes32 intentHash = keccak256(
             abi.encode(
@@ -266,9 +264,9 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
             )
         );
         bytes32 messageHash = MessageHashUtils.toTypedDataHash(DOMAIN_SEPARATOR, intentHash);
-        uint256 firstSigEnd = indexVar + 65;
+        uint256 firstSignatureEndIndex = signatureStartIndex + 65;
         // first signature ends
-        require(sender == messageHash.recover(intent[indexVar : firstSigEnd]), "Invalid sender signature");
+        require(sender == messageHash.recover(intent[signatureStartIndex : firstSignatureEndIndex]), "Invalid sender signature");
 
         // solver is not determined, no need to check solver signature
         if (solver == address(0)) {
@@ -283,19 +281,19 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         }
 
         // solver signs with assigned relayer
-        indexVar += 130;
+        uint256 secondSignatureEndIndex = signatureStartIndex + 130;
         // second signature ends
-        require(intent.length >= indexVar, "At least 2 signatures are needed to assign relayer");
+        require(intent.length >= secondSignatureEndIndex, "At least 2 signatures are needed to assign relayer");
         bytes32 solverHash = keccak256(abi.encode(intentHash, tx.origin));
         messageHash = MessageHashUtils.toEthSignedMessageHash(solverHash);
-        if (solver == messageHash.recover(intent[firstSigEnd : indexVar])) {
+        if (solver == messageHash.recover(intent[firstSignatureEndIndex : secondSignatureEndIndex])) {
             return (2, uint256(intentHash));
         }
 
         // otherwise, solver signs with relayer == address(0) and everyone can relay this intent
         solverHash = keccak256(abi.encode(intentHash, address(0)));
         messageHash = MessageHashUtils.toEthSignedMessageHash(solverHash);
-        require(solver == messageHash.recover(intent[firstSigEnd : indexVar]), "Invalid solver signature");
+        require(solver == messageHash.recover(intent[firstSignatureEndIndex : secondSignatureEndIndex]), "Invalid solver signature");
 
         return (2, uint256(intentHash));
     }
