@@ -31,12 +31,12 @@ abstract contract SelfExecutableAccount is IAccount {
     /// @param intent The intent to execute
     /// @return result of the execution
     function executeSelfIntent(bytes calldata intent) internal returns (bytes memory) {
-        (uint256 headerLength, uint256 uintVar1,) = PackedIntent.getLengths(intent);
+        (uint256 headerLength, uint256 instructionLength,) = PackedIntent.getLengths(intent);
         // no signature
-        require(intent.length == headerLength + uintVar1 + 46, "Lengths not match");
+        require(intent.length == headerLength + instructionLength + 46, "Lengths not match");
         
         // start pointer, skip (32-bytes offset, sender, standard, 3 x lengths, header)
-        uintVar1 = 78 + headerLength;
+        uint256 instructionStartIndex = 78 + headerLength;
 
         address dest;
         bytes1 hasValue;
@@ -45,20 +45,20 @@ abstract contract SelfExecutableAccount is IAccount {
 
         for (uint256 i = 0; i < headerLength; i += 2) {
             dataLength = uint16(bytes2(intent[46 + i : 48 + i]));
-            dest = address(bytes20(intent[uintVar1 : uintVar1 + 20]));
-            hasValue = bytes1(intent[uintVar1 + 20 : uintVar1 + 21]);
+            dest = address(bytes20(intent[instructionStartIndex : instructionStartIndex + 20]));
+            hasValue = bytes1(intent[instructionStartIndex + 20 : instructionStartIndex + 21]);
             if (hasValue == bytes1(0x01)) {
                 (success,) = dest.call{
-                    value : uint256(bytes32(intent[uintVar1 + 21 : uintVar1 + 53])),
+                    value : uint256(bytes32(intent[instructionStartIndex + 21 : instructionStartIndex + 53])),
                     gas : gasleft()
-                }(intent[uintVar1 + 53 : uintVar1 + 53 + dataLength]);
-                uintVar1 = uintVar1 + 53 + dataLength;
+                }(intent[instructionStartIndex + 53 : instructionStartIndex + 53 + dataLength]);
+                instructionStartIndex = instructionStartIndex + 53 + dataLength;
             } else {
                 (success,) = dest.call{
-                value : uint256(bytes32(intent[uintVar1 + 21 : uintVar1 + 53])),
+                value : uint256(bytes32(intent[instructionStartIndex + 21 : instructionStartIndex + 53])),
                 gas : gasleft()
-                }(intent[uintVar1 + 21 : uintVar1 + 21 + dataLength]);
-                uintVar1 = uintVar1 + 21 + dataLength;
+                }(intent[instructionStartIndex + 21 : instructionStartIndex + 21 + dataLength]);
+                instructionStartIndex = instructionStartIndex + 21 + dataLength;
             }
 
             if (!success) {
