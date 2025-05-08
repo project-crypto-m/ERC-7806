@@ -12,8 +12,7 @@ contract BaseTokenRelayer is ITokenRelayer {
     /// @param amount The amount of ETH to transfer
     function transferEth(uint256 amount) external {
         require(address(this).balance >= amount, "Insufficient balance");
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
-        require(success, "Failed to send Ether");
+        payable(msg.sender).transfer(amount);
     }
 
     /// @notice The function to transfer ERC20 tokens to the sender

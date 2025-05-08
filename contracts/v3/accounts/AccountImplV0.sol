@@ -19,7 +19,7 @@ contract AccountImplV0 is SelfExecutableAccount {
 
     /// @notice The AccountImplV0 is a stateless account, so it delegates the standard access control to the StandardRegistryV2 contract
     /// @dev This is a constant address that could be used by other ERC7806 accounts as well
-    StandardRegistryV2 public constant REGISTRY = StandardRegistryV2(0x1EcBE25525F6e6cDe8631e602Df6D55D3967cDF8);
+    StandardRegistryV2 public constant REGISTRY = StandardRegistryV2(0x843Fa27Dad1759F4A6d1a1f071B918866E821b23);
 
     /// @notice executeOtherIntent is a function that executes an intent on an external standard
     /// @param intent The intent to execute

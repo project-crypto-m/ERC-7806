@@ -5,7 +5,6 @@ import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils
 import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {IStandard} from "./../interfaces/IStandard.sol";
-import {ITokenRelayer} from "./../interfaces/ITokenRelayer.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
 import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
@@ -52,11 +51,11 @@ contract RelayedExecutionStandard is HashGatedStandard {
         require(instructionsLength >= 36, "Instructions too short");
         require(signatureLength == 65, "Invalid signature length");
         // end of instructions
-        uint256 instructionsEndIndex = 46 + headerLength + instructionsLength;
-        require(instructionsLength + signatureLength == intent.length, "Invalid intent length");
+        uint256 instructionsSectionEnd = 46 + headerLength + instructionsLength;
+        require(instructionsSectionEnd + signatureLength == intent.length, "Invalid intent length");
 
         // validate signature
-        uint256 hash = _validateSignatures(sender, intent, instructionsEndIndex);
+        uint256 hash = _validateSignatures(sender, intent, instructionsSectionEnd);
         require(!this.checkHash(sender, hash), "Hash is already executed");
 
         // header contains expiration timestamp and assigned relayer (optional)
@@ -86,19 +85,19 @@ contract RelayedExecutionStandard is HashGatedStandard {
         // instruction index
         uint256 instructionIndex = 0;
         // begin of the first instruction
-        uint256 instructionStart;
-        uint256 instructionEnd = headerEndIndex + 37;
+        uint256 singleInstructionStart;
+        uint256 singleInstructionEnd = headerEndIndex + 37;
 
         while (instructionIndex < numExecutions) {
-            instructionStart = instructionEnd;
-            require(instructionStart + 2 <= instructionsEndIndex, "Intent too short: instruction length");
+            singleInstructionStart = singleInstructionEnd;
+            require(singleInstructionStart + 2 <= instructionsSectionEnd, "Intent too short: instruction length");
             // end of this execution instruction
-            instructionEnd = instructionStart + 2 + uint256(uint16(bytes2(intent[instructionStart : instructionStart + 2])));
-            require(instructionEnd <= instructionsEndIndex, "Intent too short: single instruction");
+            singleInstructionEnd = singleInstructionStart + 2 + uint256(uint16(bytes2(intent[singleInstructionStart : singleInstructionStart + 2])));
+            require(singleInstructionEnd <= instructionsSectionEnd, "Intent too short: single instruction");
 
             instructionIndex += 1;
         }
-        require(instructionEnd == instructionsEndIndex, "Intent length doesn't match");
+        require(singleInstructionEnd == instructionsSectionEnd, "Intent length doesn't match");
 
         return ERC7806Constants.VALIDATION_APPROVED;
     }
@@ -111,8 +110,8 @@ contract RelayedExecutionStandard is HashGatedStandard {
         require(instructionsLength >= 36, "Instructions too short");
         require(signatureLength == 65, "Invalid signature length");
         // end of instructions
-        uint256 instructionsEndIndex = 46 + headerLength + instructionsLength;
-        require(instructionsLength + signatureLength == intent.length, "Invalid intent length");
+        uint256 instructionsSectionEnd = 46 + headerLength + instructionsLength;
+        require(instructionsSectionEnd + signatureLength == intent.length, "Invalid intent length");
 
         // fetch header content (timestamp, relayer address [optional])
         require(uint256(uint64(bytes8(intent[46 : 54]))) >= block.timestamp, "Intent expired");
@@ -121,7 +120,7 @@ contract RelayedExecutionStandard is HashGatedStandard {
             require(tx.origin == address(bytes20(intent[54 : 74])), "Invalid relayer");
         }
 
-        uint256 intentHash = _validateSignatures(sender, intent, instructionsEndIndex);
+        uint256 intentHash = _validateSignatures(sender, intent, instructionsSectionEnd);
         require(!this.checkHash(sender, intentHash), "Hash is already executed");
 
         // begin of instructions
@@ -150,21 +149,21 @@ contract RelayedExecutionStandard is HashGatedStandard {
 
         // instruction index
         uint256 instructionIndex = 2;
-        uint256 instructionEndIndex = headerEndIndex + 37;
-        uint256 instructionStartIndex;
+        uint256 singleInstructionEnd = headerEndIndex + 37;
+        uint256 singleInstructionStart;
         while (instructionIndex < unpackedInstructions.length) {
             // start of next execution instruction
-            instructionStartIndex = instructionEndIndex;
-            require(instructionStartIndex + 2 <= instructionEndIndex, "Intent too short: instruction length");
+            singleInstructionStart = singleInstructionEnd;
+            require(singleInstructionStart + 2 <= instructionsSectionEnd, "Intent too short: instruction length");
             // end of next execution instruction
-            instructionEndIndex = instructionStartIndex + 2 + uint256(uint16(bytes2(intent[instructionStartIndex : instructionStartIndex + 2])));
-            require(instructionEndIndex <= instructionsEndIndex, "Intent too short: single instruction");
+            singleInstructionEnd = singleInstructionStart + 2 + uint256(uint16(bytes2(intent[singleInstructionStart : singleInstructionStart + 2])));
+            require(singleInstructionEnd <= instructionsSectionEnd, "Intent too short: single instruction");
 
-            unpackedInstructions[instructionIndex] = intent[instructionStartIndex + 2 : instructionEndIndex];
+            unpackedInstructions[instructionIndex] = intent[singleInstructionStart + 2 : singleInstructionEnd];
 
             instructionIndex += 1;
         }
-        require(instructionEndIndex == instructionsEndIndex, "Intent length doesn't match");
+        require(singleInstructionEnd == instructionsSectionEnd, "Intent length doesn't match");
 
         return (ERC7806Constants.VALIDATION_APPROVED, unpackedInstructions);
     }
