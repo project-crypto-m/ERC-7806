@@ -3,12 +3,12 @@ pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-/// @title TestERC20
+/// @title SwapHereUSDC
 /// @notice A simple ERC20 token for testing purposes
-contract TestERC20 is ERC20 {
+contract SwapHereUSDC is ERC20 {
     constructor()
         // solhint-disable-next-line no-empty-blocks
-        ERC20("TestERC20", "TEST")
+        ERC20("SwapHereUSDC", "shUSDC")
     {}
 
     /// @notice A function to mint tokens
