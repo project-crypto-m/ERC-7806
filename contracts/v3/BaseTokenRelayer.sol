@@ -19,8 +19,11 @@ contract BaseTokenRelayer is ITokenRelayer {
     /// @param token The address of the ERC20 token
     /// @param amount The amount of ERC20 tokens to transfer
     function transferERC20(address token, uint256 amount) external {
-        bool success = IERC20(token).transfer(msg.sender, amount);
-        require(success, "Failed to send ERC20");
+        (bool success, bytes memory data) = token.call(
+            abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, amount)
+        );
+
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "Failed to ERC20 transfer");
     }
 
     /// @notice The function to transfer ERC20 tokens from the sender to the relayer
@@ -31,11 +34,17 @@ contract BaseTokenRelayer is ITokenRelayer {
     function transferERC20From(address from, address token, uint256 amount) external {
         require(from == tx.origin || from == address(this), "Can only transfer from tx.origin or this address");
         if (from == tx.origin) {
-            bool success = IERC20(token).transferFrom(from, msg.sender, amount);
-            require(success, "Failed to send ERC20");
+            (bool success, bytes memory data) = token.call(
+                abi.encodeWithSelector(IERC20.transferFrom.selector, from, msg.sender, amount)
+            );
+
+            require(success && (data.length == 0 || abi.decode(data, (bool))), "Failed to ERC20 transferFrom");
         } else {
-            bool success = IERC20(token).transfer(msg.sender, amount);
-            require(success, "Failed to send ERC20");
+            (bool success, bytes memory data) = token.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, amount)
+            );
+
+            require(success && (data.length == 0 || abi.decode(data, (bool))), "Failed to ERC20 transfer");
         }
     }
 
