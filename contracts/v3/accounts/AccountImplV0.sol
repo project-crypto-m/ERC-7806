@@ -21,6 +21,7 @@ contract AccountImplV0 is SelfExecutableAccount {
     /// @dev This is a constant address that could be used by other ERC7806 accounts as well
     StandardRegistryV2 public constant REGISTRY = StandardRegistryV2(0x1EcBE25525F6e6cDe8631e602Df6D55D3967cDF8);
 
+
     /// @notice executeOtherIntent is a function that executes an intent on an external standard
     /// @param intent The intent to execute
     /// @param standard The standard to execute the intent on
