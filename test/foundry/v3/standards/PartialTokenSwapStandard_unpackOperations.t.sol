@@ -5,14 +5,14 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
-import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC7806Constants} from "./../../../../contracts/v3/libraries/ERC7806Constants.sol";
 import {PartialTokenSwapStandard} from "./../../../../contracts/v3/standards/PartialTokenSwapStandard.sol";
 import {ITokenRelayer} from "./../../../../contracts/v3/interfaces/ITokenRelayer.sol";
 import {IAccount} from "./../../../../contracts/v3/interfaces/IAccount.sol";
 import {TestERC20} from "./../../../../contracts/test/TestERC20.sol";
-import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract ICS4Test is Test {
     using ECDSA for bytes32;

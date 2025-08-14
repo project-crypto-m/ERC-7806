@@ -10,6 +10,7 @@ import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {AmountGatedStandard} from "./AmountGatedStandard.sol";
 import {BaseTokenRelayer} from "./../BaseTokenRelayer.sol";
+import {SafeEIP7702IntentExecutor} from "./../../SafeEIP7702IntentExecutor.sol";
 
 /**
 @title PartialTokenSwapStandard
@@ -44,7 +45,7 @@ This standard allows nested intents to follow it, the first byte (uint8) after t
 @dev The unpackOperations method should only be called if the intent is validated by validateUserIntent.
 @dev To improve user experience and enhance security, this standard is using EIP-712 standard for intent signing and verification.
 */
-contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
+contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer, SafeEIP7702IntentExecutor {
     using ECDSA for bytes32;
 
     /// @notice The description of this standard
@@ -296,17 +297,5 @@ contract PartialTokenSwapStandard is AmountGatedStandard, BaseTokenRelayer {
         require(solver == messageHash.recover(intent[firstSignatureEndIndex : secondSignatureEndIndex]), "Invalid solver signature");
 
         return (2, uint256(intentHash));
-    }
-
-    /// @notice The function to execute the user intent
-    /// @dev The function is used to execute the user intent
-    /// @param intent The intent to execute
-    /// @return result the result of the execution
-    function executeUserIntent(bytes calldata intent) external returns (bytes memory) {
-        (address sender,) = PackedIntent.getSenderAndStandard(intent);
-        bytes memory executeCallData = abi.encodeCall(IAccount.executeUserIntent, (intent));
-
-        (, bytes memory result) = sender.call{value : 0, gas : gasleft()}(executeCallData);
-        return result;
     }
 }

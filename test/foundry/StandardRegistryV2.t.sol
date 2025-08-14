@@ -5,8 +5,8 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
-import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {StandardRegistryV2} from "./../../contracts/StandardRegistryV2.sol";
 
 contract StandardRegistryV2Test is Test {

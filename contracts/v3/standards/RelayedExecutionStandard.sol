@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {MessageHashUtils} from "openzeppelin/utils/cryptography/MessageHashUtils.sol";
-import {ECDSA} from "openzeppelin/utils/cryptography/ECDSA.sol";
-import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStandard} from "./../interfaces/IStandard.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
 import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {HashGatedStandard} from "./HashGatedStandard.sol";
+import {SafeEIP7702IntentExecutor} from "./../../SafeEIP7702IntentExecutor.sol";
 
 /*
 RelayedExecutionStandard
@@ -35,7 +36,7 @@ the sender account.
 
 The signature field is always 65 bytes long. It contains the signed bytes.concat(header, instructions).
 */
-contract RelayedExecutionStandard is HashGatedStandard {
+contract RelayedExecutionStandard is HashGatedStandard, SafeEIP7702IntentExecutor {
     using ECDSA for bytes32;
 
     string public constant ICS_NUMBER = "ICS1";
@@ -176,51 +177,5 @@ contract RelayedExecutionStandard is HashGatedStandard {
         require(sender == messageHash.recover(intent[sigStartIndex : sigStartIndex + 65]), "Invalid sender signature");
 
         return uint256(intentHash);
-    }
-
-    // -------------
-    // The following methods will be removed after testing
-    // -------------
-    function sampleIntent(
-        address sender, address relayer,
-        address outTokenAddress, uint128 outAmount,
-        bytes[] memory executions
-    ) external view returns (
-        bytes memory intent, bytes32 intentHash
-    ) {
-        bytes memory header = relayer == address(0) ?
-        abi.encodePacked(uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF)) :
-        abi.encodePacked(uint64((block.timestamp + 31536000) & 0xFFFFFFFFFFFFFFFF), relayer);
-
-        bytes memory instructions = bytes.concat(bytes20(outTokenAddress), bytes16(outAmount), bytes1(uint8(executions.length)));
-        for (uint256 i = 0; i < executions.length; i++) {
-            uint16 length = uint16(executions[i].length);
-            instructions = bytes.concat(instructions, bytes2(length), executions[i]);
-        }
-
-        bytes memory toSign = bytes.concat(header, instructions);
-        intentHash = keccak256(abi.encode(toSign, address(this), block.chainid));
-
-        intent = bytes.concat(bytes20(sender), bytes20(address(this)), bytes2(uint16(header.length)), bytes2(uint16(instructions.length)), bytes2(uint16(65)), toSign);
-
-        return (intent, intentHash);
-    }
-
-    function sampleERC20Execution(
-        address token, address receiver, uint256 amount
-    ) external pure returns (bytes memory) {
-        if (token == address(0)) {
-            return abi.encode(receiver, amount, "");
-        }
-
-        return abi.encode(token, uint256(0), abi.encodeWithSelector(IERC20.transfer.selector, address(receiver), amount));
-    }
-
-    function executeUserIntent(bytes calldata intent) external returns (bytes memory) {
-        (address sender,) = PackedIntent.getSenderAndStandard(intent);
-        bytes memory executeCallData = abi.encodeWithSelector(IAccount.executeUserIntent.selector, intent);
-
-        (, bytes memory result) = sender.call{value : 0, gas : gasleft()}(executeCallData);
-        return result;
     }
 }

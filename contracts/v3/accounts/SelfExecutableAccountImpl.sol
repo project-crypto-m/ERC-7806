@@ -7,9 +7,9 @@ import {IStandard} from "./../interfaces/IStandard.sol";
 import {SelfExecutableAccount} from "./SelfExecutableAccount.sol";
 import {ERC7806Constants} from "./../libraries/ERC7806Constants.sol";
 
-/// @title AccountImplV0
+/// @title SelfExecutableAccountImpl
 /// @notice This is a stateless account that can execute intents on self-standard or external standards
-contract AccountImplV0 is SelfExecutableAccount {
+contract SelfExecutableAccountImpl is SelfExecutableAccount {
     /// @notice DESCRIPTION is the description of the account
     string public constant DESCRIPTION = "Account with Batch Execution, Standard Registry and Self-Standard";
     /// @notice VERSION is the version of the account
@@ -17,7 +17,7 @@ contract AccountImplV0 is SelfExecutableAccount {
     /// @notice AUTHOR is github account of the author of the account
     string public constant AUTHOR = "hellohanchen";
 
-    /// @notice The AccountImplV0 is a stateless account, so it delegates the standard access control to the StandardRegistryV2 contract
+    /// @notice The SelfExecutableAccountImpl is a stateless account, so it delegates the standard access control to the StandardRegistryV2 contract
     /// @dev This is a constant address that could be used by other ERC7806 accounts as well
     StandardRegistryV2 public constant REGISTRY = StandardRegistryV2(0x1EcBE25525F6e6cDe8631e602Df6D55D3967cDF8);
 

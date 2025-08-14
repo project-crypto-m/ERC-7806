@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import {PackedIntent} from "./../libraries/PackedIntent.sol";
 import {IAccount} from "./../interfaces/IAccount.sol";
 
 /// @title SelfExecutableAccount
 /// @notice This is an abstract contract that implements the IAccount interface that handles self-standard and external standards in different ways. The self-standard execution implementation is fixed, while the external standard execution implementation is customizable.
 /// @dev Self-standard means the standard address is the same as the account address
-abstract contract SelfExecutableAccount is IAccount {
+abstract contract SelfExecutableAccount is IAccount, ERC721Holder, ERC1155Holder {
     /// @notice ExecutionError is an error that is thrown when an execution fails
     error ExecutionError();
 
