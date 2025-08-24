@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "../../../../contracts/test/TestERC20.sol";
 import "forge-std/Test.sol";
-import {AccountImplV0} from "./../../../../contracts/v3/accounts/AccountImplV0.sol";
+import {RegistryAccountImpl} from "./../../../../contracts/v3/accounts/RegistryAccountImpl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStandard} from "./../../../../contracts/v3/interfaces/IStandard.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -35,7 +35,7 @@ contract AccountImplV0Test is Test {
         // register standard using registry.update
         partialTokenSwapStandard = new PartialTokenSwapStandard();
         (user, userKey) = makeAddrAndKey("account");
-        AccountImplV0 mockAccountImplV0 = new AccountImplV0();
+        RegistryAccountImpl mockAccountImplV0 = new RegistryAccountImpl();
         vm.etch(user, address(mockAccountImplV0).code);
 
         bool registering = true;
@@ -74,7 +74,7 @@ contract AccountImplV0Test is Test {
         assertEq(3, operations.length);
 
         require(registry.isRegistered(user, address(partialTokenSwapStandard)), "not registered");
-        bytes memory result = AccountImplV0(payable(user)).executeUserIntent(intent);
+        bytes memory result = RegistryAccountImpl(payable(user)).executeUserIntent(intent);
         assertEq(result, new bytes(0));
     }
 }
